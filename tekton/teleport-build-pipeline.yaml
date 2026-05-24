@@ -64,6 +64,7 @@ spec:
   tasks:
     - name: clone-repo
       taskRef:
+        kind: Task
         name: git-clone
       workspaces:
         - name: output
@@ -80,6 +81,7 @@ spec:
       runAfter:
         - clone-repo
       taskRef:
+        kind: Task
         name: buildah-with-args
       workspaces:
         - name: source
