@@ -48,6 +48,7 @@ func OSSModules() *Modules {
 				entitlements.Desktop:            {Enabled: true, Limit: 0},
 				entitlements.JoinActiveSessions: {Enabled: true, Limit: 0},
 				entitlements.K8s:                {Enabled: true, Limit: 0},
+				entitlements.OIDC:               {Enabled: true, Limit: 0},
 			},
 		},
 	}

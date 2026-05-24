@@ -312,3 +312,19 @@ func TestEntitlementInfo_UnderLimit(t *testing.T) {
 		})
 	}
 }
+
+// TestOIDCEntitlementEnabledInCommunityBuild verifies that the community
+// (OSS) build enables the OIDC entitlement so connector CRUD and auth
+// requests are not blocked by the entitlement gate in auth_with_roles.go.
+func TestOIDCEntitlementEnabledInCommunityBuild(t *testing.T) {
+	t.Parallel()
+
+	m := modulestest.OSSModules()
+	features := m.Features()
+
+	oidcEnt := features.GetEntitlement(entitlements.OIDC)
+	require.True(t, oidcEnt.Enabled, "OIDC entitlement must be enabled in the community build")
+
+	samlEnt := features.GetEntitlement(entitlements.SAML)
+	require.False(t, samlEnt.Enabled, "SAML entitlement must NOT be enabled in the community build")
+}

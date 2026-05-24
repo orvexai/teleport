@@ -2588,6 +2588,9 @@ func (process *TeleportProcess) initAuthService() error {
 	}
 	authServer.SetHeadlessAuthenticationWatcher(headlessAuthenticationWatcher)
 
+	// Wire the community-edition OIDC login service (D6).
+	authServer.SetOIDCService(auth.NewOIDCService(authServer))
+
 	recordingMetadataService, err := recordingmetadatav1.NewRecordingMetadataService(recordingmetadatav1.RecordingMetadataServiceConfig{
 		Streamer:      authServer,
 		UploadHandler: authServer,
