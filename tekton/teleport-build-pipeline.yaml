@@ -1,7 +1,7 @@
 ---
 # Tekton Pipeline: build a full Teleport server image from this fork and push it.
 #
-#   git-clone (orvexai/teleport @ revision)  ->  buildah build deploy/tekton/Dockerfile  ->  push
+#   git-clone (orvexai/teleport @ revision)  ->  buildah build tekton/Dockerfile  ->  push
 #
 # Output: repos-direct.eu-central-1.myidp.cloud/teleport/teleport:<image-tag>
 #
@@ -90,7 +90,7 @@ spec:
         - name: IMAGE
           value: "$(params.image-registry)/$(params.image-namespace)/teleport:$(params.image-tag)"
         - name: DOCKERFILE
-          value: "deploy/tekton/Dockerfile"
+          value: "tekton/Dockerfile"
         - name: CONTEXT
           value: "."
         - name: BUILD_ARG_1
