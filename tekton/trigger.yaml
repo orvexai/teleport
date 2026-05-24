@@ -31,10 +31,14 @@ spec:
     - name: git-revision
       description: Commit SHA to build (from the push payload)
       default: orvex
+    - name: image-tag
+      description: |
+        Image tag derived from the git ref:
+          refs/tags/X  → X   (e.g. 19.0.0-prealpha.2)
+          refs/heads/X → X   (e.g. orvex)
+      default: orvex
   resourcetemplates:
-    # Mirrors teleport-build-pipelinerun.yaml; registry/namespace/tag/arch come
-    # from the teleport-build Pipeline's own defaults (repos-direct, teleport,
-    # orvex, amd64).
+    # image-tag is populated by the CEL overlay in the Trigger below.
     - apiVersion: tekton.dev/v1
       kind: PipelineRun
       metadata:
@@ -51,6 +55,8 @@ spec:
             value: $(tt.params.git-url)
           - name: revision
             value: $(tt.params.git-revision)
+          - name: image-tag
+            value: $(tt.params.image-tag)
         taskRunTemplate:
           serviceAccountName: tekton-smoke-test-builder
         workspaces:
@@ -93,18 +99,29 @@ spec:
         name: cel
         kind: ClusterInterceptor
       params:
-        # Only this repo + the orvex branch.
+        # Accept the orvex branch OR any git tag push on this repo.
         - name: filter
-          value: "body.repository.name == 'teleport' && body.ref == 'refs/heads/orvex'"
-        # Populate extensions.git-branch consumed by the github-push-defaults binding.
+          value: >-
+            body.repository.name == 'teleport' &&
+            (body.ref == 'refs/heads/orvex' ||
+             body.ref.startsWith('refs/tags/'))
         - name: overlays
           value:
+            # Populate extensions.git-branch for the platform binding.
             - key: git-branch
               expression: "body.ref.replace('refs/heads/', '').replace('/', '-')"
+            # Derive image tag: strip refs/tags/ or refs/heads/ prefix.
+            - key: image-tag
+              expression: >-
+                body.ref.startsWith('refs/tags/')
+                  ? body.ref.replace('refs/tags/', '')
+                  : body.ref.replace('refs/heads/', '').replace('/', '-')
   bindings:
-    # Platform-wide binding: extracts git-url ($(body.repository.clone_url)),
-    # git-revision ($(body.after)), git-branch, etc.
+    # Platform-wide binding: extracts git-url and git-revision.
     - ref: github-push-defaults
       kind: ClusterTriggerBinding
+    # Map the CEL overlay into the TriggerTemplate param.
+    - name: image-tag
+      value: $(extensions.image-tag)
   template:
     ref: teleport-build-template
