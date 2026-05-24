@@ -72,9 +72,7 @@ spec:
           - name: dockerconfig
             secret:
               secretName: tekton-harbor-credentials
-          - name: build-cache
-            persistentVolumeClaim:
-              claimName: teleport-build-cache
+          # build-cache is optional; omit binding until the PVC exists in the cluster.
 ---
 apiVersion: triggers.tekton.dev/v1beta1
 kind: Trigger
