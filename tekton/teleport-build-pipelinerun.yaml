@@ -34,7 +34,7 @@ spec:
     - name: image-namespace
       value: teleport
     - name: image-tag
-      value: orvex
+      value: 19.0.0-prealpha.2
     - name: teleport-arch
       value: amd64
 

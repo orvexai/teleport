@@ -47,7 +47,7 @@ spec:
     - name: image-tag
       type: string
       description: Image tag
-      default: orvex
+      default: 19.0.0-prealpha.2
 
     - name: teleport-arch
       type: string
