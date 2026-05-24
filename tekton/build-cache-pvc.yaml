@@ -1,0 +1,23 @@
+---
+# Persistent cache for the Teleport CI build.
+# Survives across PipelineRuns — the source PVC is ephemeral (new per run)
+# but this one is reused. Stores:
+#   go/mod/cache  — downloaded Go modules (~800 MB)
+#   go/build      — compiled Go packages (GOCACHE, ~2-3 GB)
+#   yarn          — Yarn package cache for the web UI (~500 MB)
+# First build populates it; subsequent builds save ~10-15 minutes.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: teleport-build-cache
+  namespace: tekton-pipelines
+  labels:
+    app.kubernetes.io/name: teleport-build-cache
+    app.kubernetes.io/part-of: teleport-fork
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: rook-cephfs
+  resources:
+    requests:
+      storage: 10Gi

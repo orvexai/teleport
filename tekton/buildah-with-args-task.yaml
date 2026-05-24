@@ -80,6 +80,11 @@ spec:
       description: Docker config with registry credentials
       optional: true
 
+    - name: build-cache
+      description: Persistent Go module + build cache (ReadWriteMany PVC). When
+        bound, mounted at /tmp/ci/go inside every RUN step via buildah --volume.
+      optional: true
+
   steps:
     - name: build-and-push
       image: quay.io/buildah/stable:v1.42.2
@@ -128,6 +133,16 @@ spec:
         [ -n "$(params.BUILD_ARG_3)" ] && BUILD_ARGS="$BUILD_ARGS --build-arg $(params.BUILD_ARG_3)"
         [ -n "$(params.BUILD_ARG_4)" ] && BUILD_ARGS="$BUILD_ARGS --build-arg $(params.BUILD_ARG_4)"
 
+        # Mount persistent cache if workspace is bound.
+        # UID 0 inside rootless buildah maps to the pod's UID on the host, so
+        # write access to the PVC (created by the same UID) is guaranteed.
+        CACHE_VOLUME=""
+        if [ "$(workspaces.build-cache.bound)" == "true" ]; then
+          mkdir -p "$(workspaces.build-cache.path)/go"
+          CACHE_VOLUME="--volume $(workspaces.build-cache.path)/go:/tmp/ci/go:rw"
+          echo "Build cache: $(workspaces.build-cache.path)/go -> /tmp/ci/go"
+        fi
+
         echo "Building image: $(params.IMAGE)"
         echo "Dockerfile: $(params.DOCKERFILE)"
         echo "Context: $(params.CONTEXT)"
@@ -140,6 +155,7 @@ spec:
           --tls-verify=$(params.TLS_VERIFY) \
           --layers \
           ${BUILD_ARGS} \
+          ${CACHE_VOLUME} \
           -f $(params.DOCKERFILE) \
           -t $(params.IMAGE) \
           $(params.CONTEXT)

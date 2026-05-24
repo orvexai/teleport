@@ -61,6 +61,10 @@ spec:
     - name: dockerconfig
       description: Docker registry credentials
 
+    - name: build-cache
+      description: Persistent Go module + build cache (ReadWriteMany PVC)
+      optional: true
+
   tasks:
     - name: clone-repo
       taskRef:
@@ -88,6 +92,8 @@ spec:
           workspace: source
         - name: dockerconfig
           workspace: dockerconfig
+        - name: build-cache
+          workspace: build-cache
       params:
         - name: IMAGE
           value: "$(params.image-registry)/$(params.image-namespace)/teleport:$(params.image-tag)"

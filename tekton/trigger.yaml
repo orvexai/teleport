@@ -72,6 +72,9 @@ spec:
           - name: dockerconfig
             secret:
               secretName: tekton-harbor-credentials
+          - name: build-cache
+            persistentVolumeClaim:
+              claimName: teleport-build-cache
 ---
 apiVersion: triggers.tekton.dev/v1beta1
 kind: Trigger
