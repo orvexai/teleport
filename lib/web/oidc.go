@@ -125,7 +125,7 @@ func (h *Handler) oidcLoginConsole(w http.ResponseWriter, r *http.Request, p htt
 // Mirrors githubCallback.
 func (h *Handler) oidcCallback(w http.ResponseWriter, r *http.Request, p httprouter.Params) string {
 	logger := h.logger.With("auth", "oidc")
-	logger.DebugContext(r.Context(), "Callback start", "query", r.URL.Query())
+	logger.DebugContext(r.Context(), "Callback start")
 
 	response, err := h.cfg.ProxyClient.ValidateOIDCAuthCallback(r.Context(), r.URL.Query())
 	if err != nil {
