@@ -1,0 +1,110 @@
+---
+# Auto-build on push — the app side, kept deliberately small.
+#
+# This is a standalone Tekton `Trigger` (NOT an EventListener). The platform's
+# global webhook listener (github-webhook-listener in tekton-pipelines)
+# discovers any Trigger in that namespace carrying the label
+# `ci.my-idp/discover: "true"` and runs it. So there is no per-repo
+# EventListener, webhook, ingress, RBAC, or secret here — the platform owns all
+# of that and exposes one shared webhook URL.
+#
+# Flow: push to orvex -> GitHub webhook -> platform listener -> this Trigger
+#       (filters repo + branch) -> teleport-build-template -> teleport-build run.
+#
+# These resources are pinned to `tekton-pipelines` because that is where the
+# shared `github-webhook-secret`, the registry/git credentials, and the
+# `teleport-build` Pipeline + buildah Task live. ArgoCD (via my-idp-apps
+# registration) syncs this directory into that namespace.
+
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerTemplate
+metadata:
+  name: teleport-build-template
+  namespace: tekton-pipelines
+  labels:
+    app.kubernetes.io/part-of: teleport-fork
+spec:
+  params:
+    - name: git-url
+      description: Clone URL (from the push payload)
+      default: https://github.com/orvexai/teleport.git
+    - name: git-revision
+      description: Commit SHA to build (from the push payload)
+      default: orvex
+  resourcetemplates:
+    # Mirrors teleport-build-pipelinerun.yaml; registry/namespace/tag/arch come
+    # from the teleport-build Pipeline's own defaults (repos-direct, teleport,
+    # orvex, amd64).
+    - apiVersion: tekton.dev/v1
+      kind: PipelineRun
+      metadata:
+        generateName: teleport-build-
+        namespace: tekton-pipelines
+        labels:
+          app.kubernetes.io/name: teleport-build
+          tekton.dev/pipeline: teleport-build
+      spec:
+        pipelineRef:
+          name: teleport-build
+        params:
+          - name: repo-url
+            value: $(tt.params.git-url)
+          - name: revision
+            value: $(tt.params.git-revision)
+        taskRunTemplate:
+          serviceAccountName: tekton-smoke-test-builder
+        workspaces:
+          - name: source
+            volumeClaimTemplate:
+              spec:
+                accessModes:
+                  - ReadWriteOnce
+                resources:
+                  requests:
+                    storage: 30Gi
+                storageClassName: rook-cephfs
+          - name: dockerconfig
+            secret:
+              secretName: tekton-harbor-credentials
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: Trigger
+metadata:
+  name: teleport-build-orvex
+  namespace: tekton-pipelines
+  labels:
+    app.kubernetes.io/part-of: teleport-fork
+    # Opt in to discovery by the platform github-webhook-listener.
+    ci.my-idp/discover: "true"
+spec:
+  interceptors:
+    # Validate the shared webhook HMAC and only accept push events.
+    - ref:
+        name: github
+        kind: ClusterInterceptor
+      params:
+        - name: secretRef
+          value:
+            secretName: github-webhook-secret
+            secretKey: secret
+        - name: eventTypes
+          value: ["push"]
+    - ref:
+        name: cel
+        kind: ClusterInterceptor
+      params:
+        # Only this repo + the orvex branch.
+        - name: filter
+          value: "body.repository.name == 'teleport' && body.ref == 'refs/heads/orvex'"
+        # Populate extensions.git-branch consumed by the github-push-defaults binding.
+        - name: overlays
+          value:
+            - key: git-branch
+              expression: "body.ref.replace('refs/heads/', '').replace('/', '-')"
+  bindings:
+    # Platform-wide binding: extracts git-url ($(body.repository.clone_url)),
+    # git-revision ($(body.after)), git-branch, etc.
+    - ref: github-push-defaults
+      kind: ClusterTriggerBinding
+  template:
+    ref: teleport-build-template

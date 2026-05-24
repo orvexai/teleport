@@ -1,0 +1,101 @@
+---
+# Tekton Pipeline: build a full Teleport server image from this fork and push it.
+#
+#   git-clone (orvexai/teleport @ revision)  ->  buildah build deploy/tekton/Dockerfile  ->  push
+#
+# Output: repos-direct.eu-central-1.myidp.cloud/teleport/teleport:<image-tag>
+#
+# Modeled on web-ai-classification-engine/deploy/tekton/backup-build-pipeline.yaml.
+# Reuses the cluster-resident `git-clone` and `buildah-with-args` Tasks in the
+# tekton-pipelines namespace.
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: teleport-build
+  namespace: tekton-pipelines
+  labels:
+    app.kubernetes.io/name: teleport-build-pipeline
+    app.kubernetes.io/component: ci-cd
+    app.kubernetes.io/part-of: teleport-fork
+spec:
+  description: |
+    Build and push a full Teleport server image (teleport, tctl, tsh, tbot with
+    embedded web UI) from the orvexai/teleport fork.
+
+  params:
+    - name: repo-url
+      type: string
+      description: Git repository URL
+      default: https://github.com/orvexai/teleport.git
+
+    - name: revision
+      type: string
+      description: Git revision (branch, tag, or commit SHA)
+      default: orvex
+
+    - name: image-registry
+      type: string
+      description: Container registry (push target). repos-direct bypasses the
+        Cloudflare proxy, which 500s on chunked uploads from inside the cluster.
+      default: repos-direct.eu-central-1.myidp.cloud
+
+    - name: image-namespace
+      type: string
+      description: Image namespace/repository
+      default: teleport
+
+    - name: image-tag
+      type: string
+      description: Image tag
+      default: orvex
+
+    - name: teleport-arch
+      type: string
+      description: Target architecture for the Teleport build (amd64 or arm64)
+      default: amd64
+
+  workspaces:
+    - name: source
+      description: Workspace for source code (also the buildah build context)
+
+    - name: dockerconfig
+      description: Docker registry credentials
+
+  tasks:
+    - name: clone-repo
+      taskRef:
+        name: git-clone
+      workspaces:
+        - name: output
+          workspace: source
+      params:
+        - name: url
+          value: $(params.repo-url)
+        - name: revision
+          value: $(params.revision)
+        - name: deleteExisting
+          value: "true"
+
+    - name: build-and-push
+      runAfter:
+        - clone-repo
+      taskRef:
+        name: buildah-with-args
+      workspaces:
+        - name: source
+          workspace: source
+        - name: dockerconfig
+          workspace: dockerconfig
+      params:
+        - name: IMAGE
+          value: "$(params.image-registry)/$(params.image-namespace)/teleport:$(params.image-tag)"
+        - name: DOCKERFILE
+          value: "deploy/tekton/Dockerfile"
+        - name: CONTEXT
+          value: "."
+        - name: BUILD_ARG_1
+          value: "TELEPORT_ARCH=$(params.teleport-arch)"
+        - name: TLS_VERIFY
+          # repos-direct serves a cert the buildah container's CA bundle doesn't
+          # trust; the push stays on the cluster network so we trust it implicitly.
+          value: "false"

@@ -1,0 +1,169 @@
+---
+# Buildah task with --build-arg support.
+# Copied from web-ai-classification-engine/deploy/tekton/buildah-with-args-task.yaml
+# so this repo's pipeline is self-contained. If that Task is already applied to
+# the cluster's tekton-pipelines namespace, applying this is a harmless no-op
+# (identical object).
+#
+# The only teleport-specific change vs. the original is the addition of
+# computeResources on the build step — a full Teleport build is far heavier than
+# the classify images this Task was written for.
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: buildah-with-args
+  namespace: tekton-pipelines
+  labels:
+    app.kubernetes.io/name: buildah-with-args
+    app.kubernetes.io/component: build
+    app.kubernetes.io/part-of: teleport-fork
+  annotations:
+    tekton.dev/categories: Image Build
+    tekton.dev/displayName: Buildah with Build Args
+spec:
+  description: Build a container image using Buildah with support for build arguments
+
+  params:
+    - name: IMAGE
+      description: Image name and tag
+      type: string
+
+    - name: DOCKERFILE
+      description: Path to Dockerfile
+      type: string
+      default: ./Dockerfile
+
+    - name: CONTEXT
+      description: Build context directory
+      type: string
+      default: .
+
+    - name: BUILD_ARG_1
+      description: "Build argument 1 (format: KEY=VALUE)"
+      type: string
+      default: ""
+
+    - name: BUILD_ARG_2
+      description: "Build argument 2 (format: KEY=VALUE)"
+      type: string
+      default: ""
+
+    - name: BUILD_ARG_3
+      description: "Build argument 3 (format: KEY=VALUE)"
+      type: string
+      default: ""
+
+    - name: BUILD_ARG_4
+      description: "Build argument 4 (format: KEY=VALUE)"
+      type: string
+      default: ""
+
+    - name: TLS_VERIFY
+      description: "Verify TLS certificates for registry (set false for internal repos-direct)"
+      type: string
+      default: "true"
+
+  results:
+    - name: IMAGE_DIGEST
+      description: Digest of the built image
+      type: string
+
+    - name: IMAGE_URL
+      description: URL of the pushed image
+      type: string
+
+  workspaces:
+    - name: source
+      description: Source code with Dockerfile
+
+    - name: dockerconfig
+      description: Docker config with registry credentials
+      optional: true
+
+  steps:
+    - name: build-and-push
+      image: quay.io/buildah/stable:v1.42.2
+      workingDir: $(workspaces.source.path)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      # A full Teleport build (Go + Rust + web UI) is memory- and CPU-hungry.
+      # Tune to your nodes / namespace LimitRange; these are a sane starting point.
+      computeResources:
+        requests:
+          cpu: "2"
+          memory: 6Gi
+        limits:
+          cpu: "8"
+          memory: 16Gi
+      env:
+        - name: STORAGE_DRIVER
+          value: vfs
+        - name: BUILDAH_FORMAT
+          value: oci
+      script: |
+        #!/bin/bash
+        set -eu
+
+        # Configure rootless storage to use writable volume
+        mkdir -p /var/lib/containers/storage
+        cat > /tmp/storage.conf <<STOREOF
+        [storage]
+        driver = "vfs"
+        rootless_storage_path = "/var/lib/containers/storage"
+        [storage.options.vfs]
+        ignore_chown_errors = "true"
+        STOREOF
+        export CONTAINERS_STORAGE_CONF=/tmp/storage.conf
+
+        # Setup registry auth if provided
+        if [ -d "$(workspaces.dockerconfig.path)" ]; then
+          export REGISTRY_AUTH_FILE=$(workspaces.dockerconfig.path)/.dockerconfigjson
+        fi
+
+        # Build build-arg flags from params
+        BUILD_ARGS=""
+        [ -n "$(params.BUILD_ARG_1)" ] && BUILD_ARGS="$BUILD_ARGS --build-arg $(params.BUILD_ARG_1)"
+        [ -n "$(params.BUILD_ARG_2)" ] && BUILD_ARGS="$BUILD_ARGS --build-arg $(params.BUILD_ARG_2)"
+        [ -n "$(params.BUILD_ARG_3)" ] && BUILD_ARGS="$BUILD_ARGS --build-arg $(params.BUILD_ARG_3)"
+        [ -n "$(params.BUILD_ARG_4)" ] && BUILD_ARGS="$BUILD_ARGS --build-arg $(params.BUILD_ARG_4)"
+
+        echo "Building image: $(params.IMAGE)"
+        echo "Dockerfile: $(params.DOCKERFILE)"
+        echo "Context: $(params.CONTEXT)"
+        echo "Build args: ${BUILD_ARGS}"
+        echo ""
+
+        # Build the image
+        buildah bud \
+          --format=oci \
+          --tls-verify=$(params.TLS_VERIFY) \
+          --layers \
+          ${BUILD_ARGS} \
+          -f $(params.DOCKERFILE) \
+          -t $(params.IMAGE) \
+          $(params.CONTEXT)
+
+        # Push the image
+        echo ""
+        echo "Pushing image to registry..."
+        buildah push \
+          --tls-verify=$(params.TLS_VERIFY) \
+          --digestfile /tmp/image-digest \
+          $(params.IMAGE) \
+          docker://$(params.IMAGE)
+
+        # Output results
+        cat /tmp/image-digest | tee $(results.IMAGE_DIGEST.path)
+        echo -n "$(params.IMAGE)" > $(results.IMAGE_URL.path)
+
+        echo ""
+        echo "Successfully built and pushed $(params.IMAGE)"
+
+      volumeMounts:
+        - name: varlibcontainers
+          mountPath: /var/lib/containers
+
+  volumes:
+    - name: varlibcontainers
+      emptyDir: {}

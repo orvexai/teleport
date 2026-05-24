@@ -1,0 +1,59 @@
+---
+# Manual PipelineRun for the Teleport image build.
+#
+#   kubectl create -f deploy/tekton/teleport-build-pipelinerun.yaml
+#
+# (Use `create`, not `apply` — generateName needs a fresh object each run.)
+#
+# This is the manual entrypoint and the template the Tekton Trigger renders on
+# git push (see triggers.yaml). Reuses the same ServiceAccount + credential
+# plumbing as the sibling repo's builds:
+#   - tekton-smoke-test-builder  (SA, carries git + registry access)
+#   - tekton-harbor-credentials  (dockerconfig secret for the push)
+#   - rook-cephfs                (RWO source workspace)
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: teleport-build-
+  namespace: tekton-pipelines
+  labels:
+    app.kubernetes.io/name: teleport-build
+    app.kubernetes.io/component: ci-cd
+    tekton.dev/pipeline: teleport-build
+spec:
+  pipelineRef:
+    name: teleport-build
+
+  params:
+    - name: repo-url
+      value: https://github.com/orvexai/teleport.git
+    - name: revision
+      value: orvex
+    - name: image-registry
+      value: repos-direct.eu-central-1.myidp.cloud
+    - name: image-namespace
+      value: teleport
+    - name: image-tag
+      value: orvex
+    - name: teleport-arch
+      value: amd64
+
+  taskRunTemplate:
+    serviceAccountName: tekton-smoke-test-builder
+
+  # A from-source Teleport build needs real disk for the checkout, the Go/Cargo
+  # caches, node_modules for the web UI, and buildah's vfs layer storage.
+  workspaces:
+    - name: source
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 30Gi
+          storageClassName: rook-cephfs
+
+    - name: dockerconfig
+      secret:
+        secretName: tekton-harbor-credentials
