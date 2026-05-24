@@ -72,7 +72,9 @@ spec:
           - name: dockerconfig
             secret:
               secretName: tekton-harbor-credentials
-          # build-cache is optional; omit binding until the PVC exists in the cluster.
+          - name: build-cache
+            persistentVolumeClaim:
+              claimName: teleport-build-cache
 ---
 apiVersion: triggers.tekton.dev/v1beta1
 kind: Trigger
@@ -102,10 +104,7 @@ spec:
       params:
         # Accept the orvex branch OR any git tag push on this repo.
         - name: filter
-          value: >-
-            body.repository.name == 'teleport' &&
-            (body.ref == 'refs/heads/orvex' ||
-             body.ref.startsWith('refs/tags/'))
+          value: "body.repository.name == 'teleport' && (body.ref == 'refs/heads/orvex' || body.ref.startsWith('refs/tags/'))"
         - name: overlays
           value:
             # Populate extensions.git-branch for the platform binding.
@@ -113,10 +112,7 @@ spec:
               expression: "body.ref.replace('refs/heads/', '').replace('/', '-')"
             # Derive image tag: strip refs/tags/ or refs/heads/ prefix.
             - key: image-tag
-              expression: >-
-                body.ref.startsWith('refs/tags/')
-                  ? body.ref.replace('refs/tags/', '')
-                  : body.ref.replace('refs/heads/', '').replace('/', '-')
+              expression: "body.ref.startsWith('refs/tags/') ? body.ref.replace('refs/tags/', '') : body.ref.replace('refs/heads/', '').replace('/', '-')"
   bindings:
     # Platform-wide binding: extracts git-url and git-revision.
     - ref: github-push-defaults
