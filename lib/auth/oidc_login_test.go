@@ -17,135 +17,78 @@
  */
 
 // Characterization test net for the OIDC login service (lib/auth/oidc_login.go).
-// All cases are skipped (t.Skip) until Wave 2 un-skips them alongside the
-// implementation.  The file compiles in Wave 0 to keep the gate green.
 
 package auth_test
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-jose/go-jose/v4"
 	josejwt "github.com/go-jose/go-jose/v4/jwt"
-	"github.com/google/uuid"
 	"github.com/gravitational/trace"
-	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/require"
 
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/lib/auth"
 	"github.com/gravitational/teleport/lib/auth/authtest"
-	authority "github.com/gravitational/teleport/lib/auth/testauthority"
-	"github.com/gravitational/teleport/lib/backend/memory"
-	"github.com/gravitational/teleport/lib/modules"
+	"github.com/gravitational/teleport/lib/cryptosuites"
 	"github.com/gravitational/teleport/lib/modules/modulestest"
 	"github.com/gravitational/teleport/lib/services"
 )
 
-// oidcTestEnv is a minimal test fixture for the OIDC login service.
-type oidcTestEnv struct {
-	server    *auth.Server
-	connector types.OIDCConnector
-	// idpKey is the private key used by the fake IdP to sign ID tokens.
-	idpKey *rsa.PrivateKey
-	// idpServer is the fake OIDC discovery/token server.
-	idpServer *httptest.Server
+// fakeIDPServer is a configurable fake OIDC identity provider server.
+// Tests call SetNonce to inject the nonce that the token endpoint embeds in
+// the signed ID token, simulating a real IdP that stores nonces session-side.
+// SetSigningKey overrides the key used for token signing (JWKS always
+// advertises the original key) — used in L6 to test bad signature rejection.
+type fakeIDPServer struct {
+	mu         sync.Mutex
+	nonce      string
+	key        *rsa.PrivateKey // advertised in JWKS
+	signingKey *rsa.PrivateKey // used to sign tokens; nil means use key
+	server     *httptest.Server
 }
 
-// setupOIDCTestEnv creates a minimal auth server and a fake Keycloak-like OIDC
-// IdP for unit-testing the OIDC login service.
-func setupOIDCTestEnv(t *testing.T) *oidcTestEnv {
-	t.Helper()
-
-	clk := clockwork.NewFakeClockAt(time.Now())
-
-	b, err := memory.New(memory.Config{
-		Context: t.Context(),
-		Clock:   clk,
-	})
-	require.NoError(t, err)
-
-	clusterName, err := services.NewClusterNameWithRandomID(types.ClusterNameSpecV2{
-		ClusterName: "oidc-test.localhost",
-	})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = b.Close() })
-
-	keygen, err := authority.NewKeygen(modules.BuildOSS, clk.Now)
-	require.NoError(t, err)
-
-	// Use OSS modules with OIDC enabled so the entitlement gate passes.
-	ossModules := modulestest.OSSModules()
-
-	srv, err := auth.NewServer(&auth.InitConfig{
-		ClusterName:            clusterName,
-		Backend:                b,
-		VersionStorage:         authtest.NewFakeTeleportVersion(),
-		Authority:              keygen,
-		SkipPeriodicOperations: true,
-		HostUUID:               uuid.NewString(),
-		Modules:                ossModules,
-	})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = srv.Close() })
-
-	// Generate an RSA key for the fake IdP.
-	idpKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
-
-	// Build a fake OIDC discovery server.
-	idpServer := buildFakeOIDCServer(t, idpKey)
-
-	// Create the connector pointing at the fake IdP.
-	connector, err := types.NewOIDCConnector("keycloak", types.OIDCConnectorSpecV3{
-		IssuerURL:    idpServer.URL,
-		ClientID:     "teleport",
-		ClientSecret: "supersecret",
-		RedirectURLs: []string{"https://proxy.example.com/v1/webapi/oidc/callback"},
-		Scope:        []string{"openid", "profile", "email"},
-		ClaimsToRoles: []types.ClaimMapping{
-			{
-				Claim: "groups",
-				Value: "admins",
-				Roles: []string{"access"},
-			},
-		},
-	})
-	require.NoError(t, err)
-
-	return &oidcTestEnv{
-		server:    srv,
-		connector: connector,
-		idpKey:    idpKey,
-		idpServer: idpServer,
-	}
+// SetNonce configures the nonce embedded in the next ID token issued.
+func (f *fakeIDPServer) SetNonce(nonce string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.nonce = nonce
 }
 
-// buildFakeOIDCServer returns an httptest.Server that serves OIDC discovery,
-// JWKS, and a minimal token endpoint — enough for unit tests.
-func buildFakeOIDCServer(t *testing.T, key *rsa.PrivateKey) *httptest.Server {
-	t.Helper()
+// SetSigningKey overrides the signing key for subsequent token responses.
+// The JWKS endpoint continues to advertise the original key, so tokens
+// signed with this key will fail signature verification.
+func (f *fakeIDPServer) SetSigningKey(key *rsa.PrivateKey) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.signingKey = key
+}
 
-	var srv *httptest.Server
+// URL returns the base URL of the fake IdP.
+func (f *fakeIDPServer) URL() string { return f.server.URL }
+
+// newFakeIDPServer creates and starts a fake OIDC discovery/token server.
+func newFakeIDPServer(t *testing.T, key *rsa.PrivateKey) *fakeIDPServer {
+	t.Helper()
+	f := &fakeIDPServer{key: key}
 	mux := http.NewServeMux()
 
-	// Discovery document.
 	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
 		doc := map[string]any{
-			"issuer":                                srv.URL,
-			"authorization_endpoint":                srv.URL + "/protocol/openid-connect/auth",
-			"token_endpoint":                        srv.URL + "/protocol/openid-connect/token",
-			"jwks_uri":                              srv.URL + "/protocol/openid-connect/certs",
+			"issuer":                                f.server.URL,
+			"authorization_endpoint":                f.server.URL + "/protocol/openid-connect/auth",
+			"token_endpoint":                        f.server.URL + "/protocol/openid-connect/token",
+			"jwks_uri":                              f.server.URL + "/protocol/openid-connect/certs",
 			"response_types_supported":              []string{"code"},
 			"subject_types_supported":               []string{"public"},
 			"id_token_signing_alg_values_supported": []string{"RS256"},
@@ -154,35 +97,33 @@ func buildFakeOIDCServer(t *testing.T, key *rsa.PrivateKey) *httptest.Server {
 		_ = json.NewEncoder(w).Encode(doc)
 	})
 
-	// JWKS endpoint.
 	mux.HandleFunc("/protocol/openid-connect/certs", func(w http.ResponseWriter, r *http.Request) {
 		jwks := jose.JSONWebKeySet{
-			Keys: []jose.JSONWebKey{
-				{
-					Key:       &key.PublicKey,
-					KeyID:     "test-key-1",
-					Algorithm: string(jose.RS256),
-					Use:       "sig",
-				},
-			},
+			Keys: []jose.JSONWebKey{{
+				Key:       &key.PublicKey,
+				KeyID:     "test-key-1",
+				Algorithm: string(jose.RS256),
+				Use:       "sig",
+			}},
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(jwks)
 	})
 
-	// Token endpoint — returns a signed ID token for testing.
 	mux.HandleFunc("/protocol/openid-connect/token", func(w http.ResponseWriter, r *http.Request) {
-		if err := r.ParseForm(); err != nil {
+		if err := r.ParseForm(); err != nil || r.FormValue("code") == "" {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
-		nonce := r.FormValue("nonce")
-		code := r.FormValue("code")
-		if code == "" {
-			http.Error(w, "missing code", http.StatusBadRequest)
-			return
+		f.mu.Lock()
+		nonce := f.nonce
+		signingKey := f.signingKey
+		if signingKey == nil {
+			signingKey = f.key
 		}
-		idToken := buildFakeIDToken(t, key, srv.URL, "teleport", "testuser@example.com", nonce, []string{"admins"})
+		f.mu.Unlock()
+		idToken := buildFakeIDToken(t, signingKey, f.server.URL, "teleport",
+			"testuser@example.com", nonce, []string{"admins"})
 		resp := map[string]any{
 			"access_token": "fake-access-token",
 			"token_type":   "Bearer",
@@ -192,56 +133,68 @@ func buildFakeOIDCServer(t *testing.T, key *rsa.PrivateKey) *httptest.Server {
 		_ = json.NewEncoder(w).Encode(resp)
 	})
 
-	srv = httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-	return srv
+	f.server = httptest.NewServer(mux)
+	t.Cleanup(f.server.Close)
+	return f
 }
 
-// buildFakeIDToken signs a minimal JWT ID token with the given RSA key.
-func buildFakeIDToken(t *testing.T, key *rsa.PrivateKey, issuer, audience, subject, nonce string, groups []string) string {
+// oidcTestEnv is a minimal test fixture for the OIDC login service.
+type oidcTestEnv struct {
+	server    *auth.Server
+	connector types.OIDCConnector
+	idpKey    *rsa.PrivateKey
+	idp       *fakeIDPServer
+}
+
+func setupOIDCTestEnv(t *testing.T) *oidcTestEnv {
 	t.Helper()
 
+	authSrv, err := authtest.NewAuthServer(authtest.AuthServerConfig{
+		Dir:     t.TempDir(),
+		Modules: modulestest.OSSModules(),
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = authSrv.AuthServer.Close() })
+
+	srv := authSrv.AuthServer
+
+	keySigner, err := cryptosuites.GenerateKeyWithAlgorithm(cryptosuites.RSA2048)
+	require.NoError(t, err)
+	idpKey := keySigner.(*rsa.PrivateKey)
+	idp := newFakeIDPServer(t, idpKey)
+
+	// Wire the OIDC login service (D6).
+	srv.SetOIDCService(auth.NewOIDCService(srv))
+
+	connector, err := types.NewOIDCConnector("keycloak", types.OIDCConnectorSpecV3{
+		IssuerURL:    idp.URL(),
+		ClientID:     "teleport",
+		ClientSecret: "supersecret",
+		RedirectURLs: []string{"https://proxy.example.com/v1/webapi/oidc/callback"},
+		Scope:        []string{"openid", "profile", "email"},
+		ClaimsToRoles: []types.ClaimMapping{
+			{Claim: "groups", Value: "admins", Roles: []string{"access"}},
+		},
+	})
+	require.NoError(t, err)
+
+	return &oidcTestEnv{server: srv, connector: connector, idpKey: idpKey, idp: idp}
+}
+
+// buildFakeIDToken signs a minimal JWT ID token.
+func buildFakeIDToken(t *testing.T, key *rsa.PrivateKey, issuer, audience, subject, nonce string, groups []string) string {
+	t.Helper()
 	sig, err := jose.NewSigner(
 		jose.SigningKey{Algorithm: jose.RS256, Key: key},
 		(&jose.SignerOptions{}).WithType("JWT").WithHeader("kid", "test-key-1"),
 	)
 	require.NoError(t, err)
-
 	now := time.Now()
 	claims := map[string]any{
-		"iss":    issuer,
-		"aud":    audience,
-		"sub":    subject,
-		"email":  subject,
-		"nonce":  nonce,
-		"iat":    now.Unix(),
-		"exp":    now.Add(10 * time.Minute).Unix(),
+		"iss": issuer, "aud": audience, "sub": subject,
+		"email": subject, "nonce": nonce,
+		"iat": now.Unix(), "exp": now.Add(10 * time.Minute).Unix(),
 		"groups": groups,
-	}
-
-	raw, err := josejwt.Signed(sig).Claims(claims).Serialize()
-	require.NoError(t, err)
-	return raw
-}
-
-// buildFakeIDTokenWithKey signs with a different key to simulate a bad
-// signature.
-func buildFakeIDTokenWithKey(t *testing.T, key *rsa.PrivateKey, issuer, audience, subject, nonce string) string {
-	t.Helper()
-	sig, err := jose.NewSigner(
-		jose.SigningKey{Algorithm: jose.RS256, Key: key},
-		(&jose.SignerOptions{}).WithType("JWT").WithHeader("kid", "wrong-key"),
-	)
-	require.NoError(t, err)
-
-	now := time.Now()
-	claims := map[string]any{
-		"iss":   issuer,
-		"aud":   audience,
-		"sub":   subject,
-		"nonce": nonce,
-		"iat":   now.Unix(),
-		"exp":   now.Add(10 * time.Minute).Unix(),
 	}
 	raw, err := josejwt.Signed(sig).Claims(claims).Serialize()
 	require.NoError(t, err)
@@ -250,39 +203,31 @@ func buildFakeIDTokenWithKey(t *testing.T, key *rsa.PrivateKey, issuer, audience
 
 // ─── L1: Auth request ────────────────────────────────────────────────────────
 
-// TestOIDCL1_AuthRequest verifies that createOIDCAuthRequest builds a valid
-// authorization-code URL (issuer's authorize endpoint, client_id, scope incl.
-// openid, state, nonce) and persists the request.
 func TestOIDCL1_AuthRequest(t *testing.T) {
-	t.Skip("un-skip in Wave 2")
-
+	t.Parallel()
 	ctx := context.Background()
 	env := setupOIDCTestEnv(t)
 
-	// Ensure the connector exists in storage.
 	_, err := env.server.CreateOIDCConnector(ctx, env.connector)
 	require.NoError(t, err)
 
-	req := types.OIDCAuthRequest{
-		ConnectorID:      env.connector.GetName(),
-		CreateWebSession: true,
-		Type:             "web",
-	}
-
-	created, err := env.server.CreateOIDCAuthRequest(ctx, req)
+	created, err := env.server.CreateOIDCAuthRequest(ctx, types.OIDCAuthRequest{
+		ConnectorID: env.connector.GetName(), CreateWebSession: true, Type: "web",
+	})
 	require.NoError(t, err)
-	require.NotEmpty(t, created.StateToken, "state token must be set")
-	require.NotEmpty(t, created.RedirectURL, "redirect URL must be set")
+	require.NotEmpty(t, created.StateToken)
+	require.NotEmpty(t, created.RedirectURL)
 
 	parsed, err := url.Parse(created.RedirectURL)
 	require.NoError(t, err)
-
 	q := parsed.Query()
 	require.Equal(t, "teleport", q.Get("client_id"))
 	require.NotEmpty(t, q.Get("state"))
 	require.NotEmpty(t, q.Get("nonce"))
 	require.Contains(t, q.Get("scope"), "openid")
 	require.Equal(t, "code", q.Get("response_type"))
+	// Nonce must equal state (used-as-nonce pattern).
+	require.Equal(t, created.StateToken, q.Get("nonce"))
 
 	// Must be persisted.
 	stored, err := env.server.GetOIDCAuthRequest(ctx, created.StateToken)
@@ -292,50 +237,46 @@ func TestOIDCL1_AuthRequest(t *testing.T) {
 
 // ─── L2: Callback happy path ─────────────────────────────────────────────────
 
-// TestOIDCL2_CallbackHappyPath verifies that a well-formed callback creates /
-// updates the user, applies claims→roles, and returns a populated
-// OIDCAuthResponse with a session.
 func TestOIDCL2_CallbackHappyPath(t *testing.T) {
-	t.Skip("un-skip in Wave 2")
-
+	t.Parallel()
 	ctx := context.Background()
 	env := setupOIDCTestEnv(t)
 
-	_, err := env.server.CreateOIDCConnector(ctx, env.connector)
+	// Create the role so session creation doesn't fail.
+	accessRole, err := types.NewRole("access", types.RoleSpecV6{})
+	require.NoError(t, err)
+	_, err = env.server.CreateRole(ctx, accessRole)
 	require.NoError(t, err)
 
-	// Create an auth request and capture state/nonce so the fake token
-	// endpoint can embed them.
-	req := types.OIDCAuthRequest{
-		ConnectorID:      env.connector.GetName(),
-		CreateWebSession: true,
-		Type:             "web",
-	}
-	created, err := env.server.CreateOIDCAuthRequest(ctx, req)
+	_, err = env.server.CreateOIDCConnector(ctx, env.connector)
 	require.NoError(t, err)
 
-	q := url.Values{}
-	q.Set("state", created.StateToken)
-	q.Set("code", "fake-code")
+	created, err := env.server.CreateOIDCAuthRequest(ctx, types.OIDCAuthRequest{
+		ConnectorID: env.connector.GetName(), CreateWebSession: true, Type: "web",
+	})
+	require.NoError(t, err)
 
-	resp, err := env.server.ValidateOIDCAuthCallback(ctx, q)
+	// Configure the fake IdP to embed the correct nonce.
+	env.idp.SetNonce(created.StateToken)
+
+	resp, err := env.server.ValidateOIDCAuthCallback(ctx, url.Values{
+		"state": {created.StateToken},
+		"code":  {"fake-code"},
+	})
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	require.NotEmpty(t, resp.Username)
 	require.NotNil(t, resp.Session)
+	require.Equal(t, "keycloak", resp.Identity.ConnectorID)
 }
 
 // ─── L3: claims→roles ────────────────────────────────────────────────────────
 
-// TestOIDCL3_ClaimsToRoles verifies that connector ClaimsToRoles maps a
-// Keycloak groups claim to the expected Teleport roles via services.TraitsToRoles.
 func TestOIDCL3_ClaimsToRoles(t *testing.T) {
-	t.Skip("un-skip in Wave 2")
-
+	t.Parallel()
 	connector, err := types.NewOIDCConnector("kc", types.OIDCConnectorSpecV3{
-		IssuerURL:    "https://keycloak.example.com/realms/myrealm",
-		ClientID:     "teleport",
-		ClientSecret: "s",
+		IssuerURL: "https://kc.example.com/realms/r", ClientID: "t", ClientSecret: "s",
+		RedirectURLs: []string{"https://proxy.example.com/v1/webapi/oidc/callback"},
 		ClaimsToRoles: []types.ClaimMapping{
 			{Claim: "groups", Value: "admins", Roles: []string{"access", "editor"}},
 			{Claim: "groups", Value: "viewers", Roles: []string{"reviewer"}},
@@ -343,116 +284,107 @@ func TestOIDCL3_ClaimsToRoles(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	traits := map[string][]string{
+	_, roles := services.TraitsToRoles(connector.GetTraitMappings(), map[string][]string{
 		"groups": {"admins", "engineering"},
-	}
-	_, roles := services.TraitsToRoles(connector.GetTraitMappings(), traits)
+	})
 	require.ElementsMatch(t, []string{"access", "editor"}, roles)
 }
 
-// ─── L4: invalid/missing state token ─────────────────────────────────────────
+// ─── L4: invalid state ───────────────────────────────────────────────────────
 
-// TestOIDCL4_InvalidState verifies that an invalid or missing state token is
-// rejected before any user or session is created.
 func TestOIDCL4_InvalidState(t *testing.T) {
-	t.Skip("un-skip in Wave 2")
-
+	t.Parallel()
 	ctx := context.Background()
 	env := setupOIDCTestEnv(t)
 
 	_, err := env.server.CreateOIDCConnector(ctx, env.connector)
 	require.NoError(t, err)
 
-	q := url.Values{}
-	q.Set("state", "this-state-does-not-exist")
-	q.Set("code", "fake-code")
-
-	_, err = env.server.ValidateOIDCAuthCallback(ctx, q)
+	_, err = env.server.ValidateOIDCAuthCallback(ctx, url.Values{
+		"state": {"this-state-does-not-exist"},
+		"code":  {"fake-code"},
+	})
 	require.Error(t, err)
 	require.True(t, trace.IsNotFound(err) || trace.IsAccessDenied(err) || trace.IsOAuth2(err),
-		"expected a not-found/access-denied/oauth2 error, got: %v", err)
+		"expected not-found/access-denied/oauth2 error, got: %v", err)
 }
 
-// ─── L5: nonce mismatch ───────────────────────────────────────────────────────
+// ─── L5: nonce mismatch ──────────────────────────────────────────────────────
 
-// TestOIDCL5_NonceMismatch verifies that a nonce mismatch in the ID token is
-// rejected.
 func TestOIDCL5_NonceMismatch(t *testing.T) {
-	t.Skip("un-skip in Wave 2")
-
+	t.Parallel()
 	ctx := context.Background()
 	env := setupOIDCTestEnv(t)
 
 	_, err := env.server.CreateOIDCConnector(ctx, env.connector)
 	require.NoError(t, err)
 
-	// Use a real OIDC discovery to get a valid provider; build a token with a
-	// wrong nonce.
-	//
-	// The fake token server returns a nonce-embedded token.  We cannot easily
-	// inject a wrong nonce into the server's response here without extra
-	// machinery, so this test drives the service with a deliberately mutated
-	// callback that triggers nonce validation.
-	//
-	// The implementation must store the nonce inside the OIDCAuthRequest and
-	// compare it against the nonce claim in the verified ID token.
-	_ = ctx
+	created, err := env.server.CreateOIDCAuthRequest(ctx, types.OIDCAuthRequest{
+		ConnectorID: env.connector.GetName(), CreateWebSession: true, Type: "web",
+	})
+	require.NoError(t, err)
 
-	// This test requires the real service to be wired; the concrete assertion
-	// is added in Wave 2.
-	t.Skip("un-skip in Wave 2 once the nonce is stored in OIDCAuthRequest")
+	// Wrong nonce — service must reject.
+	env.idp.SetNonce("wrong-nonce-does-not-match-state")
+
+	_, err = env.server.ValidateOIDCAuthCallback(ctx, url.Values{
+		"state": {created.StateToken},
+		"code":  {"fake-code"},
+	})
+	require.Error(t, err)
+	require.True(t, trace.IsAccessDenied(err),
+		"expected access denied for nonce mismatch, got: %v", err)
 }
 
-// ─── L6: bad ID-token signature ──────────────────────────────────────────────
+// ─── L6: bad signature ───────────────────────────────────────────────────────
 
-// TestOIDCL6_BadIDTokenSignature verifies that an ID token signed with an
-// unknown key is rejected.
 func TestOIDCL6_BadIDTokenSignature(t *testing.T) {
-	t.Skip("un-skip in Wave 2")
-
-	// Generate a separate key that is NOT registered in the fake IdP's JWKS.
-	unknownKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
-
-	// Build a bad token signed with the unknown key.
-	env := setupOIDCTestEnv(t)
-	badToken := buildFakeIDTokenWithKey(t, unknownKey, env.idpServer.URL, "teleport", "user@example.com", "nonce123")
-	require.NotEmpty(t, badToken)
-
-	// The verifier must reject this token; confirmed by the implementation in Wave 2.
+	t.Parallel()
 	ctx := context.Background()
-	provider, err := oidc.NewProvider(ctx, env.idpServer.URL)
+	env := setupOIDCTestEnv(t)
+
+	_, err := env.server.CreateOIDCConnector(ctx, env.connector)
 	require.NoError(t, err)
 
-	verifier := provider.Verifier(&oidc.Config{ClientID: "teleport", SkipExpiryCheck: true})
-	_, err = verifier.Verify(ctx, badToken)
+	created, err := env.server.CreateOIDCAuthRequest(ctx, types.OIDCAuthRequest{
+		ConnectorID: env.connector.GetName(), CreateWebSession: false, Type: "web",
+	})
+	require.NoError(t, err)
+
+	// Make the IdP sign with an unknown key that is NOT advertised in its JWKS.
+	// Verification in ValidateOIDCAuthCallback must reject the token.
+	unknownSigner, err := cryptosuites.GenerateKeyWithAlgorithm(cryptosuites.RSA2048)
+	require.NoError(t, err)
+	env.idp.SetSigningKey(unknownSigner.(*rsa.PrivateKey))
+	env.idp.SetNonce(created.StateToken)
+
+	_, err = env.server.ValidateOIDCAuthCallback(ctx, url.Values{
+		"state": {created.StateToken},
+		"code":  {"fake-code"},
+	})
 	require.Error(t, err, "token signed with unknown key must not verify")
 }
 
-// ─── L7: disallowed client redirect URL ──────────────────────────────────────
+// ─── L7: disallowed redirect ─────────────────────────────────────────────────
 
-// TestOIDCL7_DisallowedClientRedirect verifies that sso.ValidateClientRedirect
-// rejects a disallowed client redirect URL, mirroring github.go:159.
 func TestOIDCL7_DisallowedClientRedirect(t *testing.T) {
-	t.Skip("un-skip in Wave 2")
-
+	t.Parallel()
 	ctx := context.Background()
 	env := setupOIDCTestEnv(t)
 
 	_, err := env.server.CreateOIDCConnector(ctx, env.connector)
 	require.NoError(t, err)
 
-	// A console-mode auth request with an arbitrary disallowed redirect URL.
-	req := types.OIDCAuthRequest{
+	_, err = env.server.CreateOIDCAuthRequest(ctx, types.OIDCAuthRequest{
 		ConnectorID:       env.connector.GetName(),
-		CreateWebSession:  false, // console flow — redirect URL is validated
+		CreateWebSession:  false,
 		ClientRedirectURL: "https://evil.example.com/callback",
 		Type:              "console",
-	}
-
-	_, err = env.server.CreateOIDCAuthRequest(ctx, req)
+	})
 	require.Error(t, err)
-	require.True(t, trace.IsAccessDenied(err) || strings.Contains(err.Error(), "invalid") ||
-		strings.Contains(err.Error(), "disallowed"),
-		"expected a redirect-validation error, got: %v", err)
+	require.True(t,
+		trace.IsAccessDenied(err) ||
+			strings.Contains(err.Error(), "invalid") ||
+			strings.Contains(err.Error(), "disallowed"),
+		"expected redirect-validation error, got: %v", err)
 }

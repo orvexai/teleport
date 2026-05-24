@@ -149,11 +149,11 @@ func (a *Server) CreateOIDCAuthRequestForMFA(ctx context.Context, req types.OIDC
 
 // ValidateOIDCAuthCallback delegates the method call to the oidcAuthService if present,
 // or returns a NotImplemented error if not present.
+// The helper emits a UserLogin audit event regardless of success or failure.
 func (a *Server) ValidateOIDCAuthCallback(ctx context.Context, q url.Values) (*authclient.OIDCAuthResponse, error) {
 	if a.oidcAuthService == nil {
 		return nil, errOIDCNotImplemented
 	}
 
-	resp, err := a.oidcAuthService.ValidateOIDCAuthCallback(ctx, q)
-	return resp, trace.Wrap(err)
+	return validateOIDCAuthCallbackHelper(ctx, a.oidcAuthService, q, a.emitter, a.logger)
 }
