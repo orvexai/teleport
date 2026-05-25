@@ -110,10 +110,10 @@ spec:
         #!/bin/bash
         set -eu
 
-        # privileged: true + native kernel overlay + node-local hostPath store:
-        # the overlay layers survive pod termination on the same node, so the
-        # buildbox image is only downloaded once per node. Subsequent builds skip
-        # the pull entirely — FROM goes from ~2-3 min to seconds.
+        # emptyDir for the live buildah store — fresh every run, no shared mutable
+        # state, no lock leaks, no disk growth. The buildbox image is cached as an
+        # OCI layout on the PVC and imported at startup so each build reads from
+        # local disk rather than pulling from the registry.
         mkdir -p /var/lib/containers/storage
         cat > /tmp/storage.conf <<STOREOF
         [storage]
@@ -125,16 +125,27 @@ spec:
         STOREOF
         export CONTAINERS_STORAGE_CONF=/tmp/storage.conf
 
-        # Clear any stale lock files left by a previously killed pod. Lock files
-        # are PID-scoped; a new pod's PID can never match an old lock so they only
-        # ever block or confuse buildah — safe to remove unconditionally at startup.
-        find /var/lib/containers/storage -name '*.lock' -delete 2>/dev/null || true
-        mkdir -p /tmp/containers-run && find /tmp/containers-run -name '*.lock' -delete 2>/dev/null || true
+        # Pre-warm the local store from the PVC OCI cache. On first run: pull from
+        # registry, write to temp dir, atomic rename → cache. Concurrent first runs:
+        # one wins the rename; others proceed with the registry pull (safe fallback).
+        BUILDBOX_REF="ghcr.io/gravitational/teleport-buildbox:teleport19"
+        BUILDBOX_OCI_DIR="/tmp/ci/buildbox-oci"
 
-        # Prune dangling/intermediate layers from previous builds. Keeps the node
-        # disk from growing unboundedly. Runs before the build so a full disk
-        # doesn't cause a mid-build failure.
-        buildah prune --all 2>/dev/null || true
+        if [ -f "${BUILDBOX_OCI_DIR}/index.json" ]; then
+          echo "Importing buildbox from PVC OCI cache..."
+          skopeo copy "oci:${BUILDBOX_OCI_DIR}" "containers-storage:${BUILDBOX_REF}"
+        else
+          echo "No PVC cache found — pulling buildbox from registry..."
+          buildah pull "${BUILDBOX_REF}"
+          OCI_TMP=$(mktemp -d /tmp/ci/buildbox-oci-XXXXXX)
+          if skopeo copy "containers-storage:${BUILDBOX_REF}" "oci:${OCI_TMP}"; then
+            mv "${OCI_TMP}" "${BUILDBOX_OCI_DIR}" 2>/dev/null || rm -rf "${OCI_TMP}"
+            echo "Buildbox cached to PVC."
+          else
+            rm -rf "${OCI_TMP}"
+            echo "Cache write skipped (non-fatal)."
+          fi
+        fi
 
         # Setup registry auth if provided
         if [ -d "$(workspaces.dockerconfig.path)" ]; then
@@ -197,9 +208,4 @@ spec:
 
   volumes:
     - name: varlibcontainers
-      hostPath:
-        # Node-local overlay store — persists the buildbox image layers across
-        # builds on the same node. First pull populates it; subsequent builds
-        # reuse the cached layers and skip the pull entirely.
-        path: /var/lib/teleport-buildah-store
-        type: DirectoryOrCreate
+      emptyDir: {}
