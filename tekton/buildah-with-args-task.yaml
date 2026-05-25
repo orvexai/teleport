@@ -128,22 +128,26 @@ spec:
         # Pre-warm the local store from the PVC OCI cache. On first run: pull from
         # registry, write to temp dir, atomic rename → cache. Concurrent first runs:
         # one wins the rename; others proceed with the registry pull (safe fallback).
+        # BUILDBOX_OCI_DIR is on the PVC (workspaces.build-cache.path), NOT /tmp/ci —
+        # that path only exists inside the buildah container, not the pod itself.
         BUILDBOX_REF="ghcr.io/gravitational/teleport-buildbox:teleport19"
-        BUILDBOX_OCI_DIR="/tmp/ci/buildbox-oci"
+        BUILDBOX_OCI_DIR="$(workspaces.build-cache.path)/buildbox-oci"
 
-        if [ -f "${BUILDBOX_OCI_DIR}/index.json" ]; then
+        if [ "$(workspaces.build-cache.bound)" == "true" ] && [ -f "${BUILDBOX_OCI_DIR}/index.json" ]; then
           echo "Importing buildbox from PVC OCI cache..."
           skopeo copy "oci:${BUILDBOX_OCI_DIR}" "containers-storage:${BUILDBOX_REF}"
         else
           echo "No PVC cache found — pulling buildbox from registry..."
           buildah pull "${BUILDBOX_REF}"
-          OCI_TMP=$(mktemp -d /tmp/ci/buildbox-oci-XXXXXX)
-          if skopeo copy "containers-storage:${BUILDBOX_REF}" "oci:${OCI_TMP}"; then
-            mv "${OCI_TMP}" "${BUILDBOX_OCI_DIR}" 2>/dev/null || rm -rf "${OCI_TMP}"
-            echo "Buildbox cached to PVC."
-          else
-            rm -rf "${OCI_TMP}"
-            echo "Cache write skipped (non-fatal)."
+          if [ "$(workspaces.build-cache.bound)" == "true" ]; then
+            OCI_TMP=$(mktemp -d "$(workspaces.build-cache.path)/buildbox-oci-XXXXXX")
+            if skopeo copy "containers-storage:${BUILDBOX_REF}" "oci:${OCI_TMP}"; then
+              mv "${OCI_TMP}" "${BUILDBOX_OCI_DIR}" 2>/dev/null || rm -rf "${OCI_TMP}"
+              echo "Buildbox cached to PVC."
+            else
+              rm -rf "${OCI_TMP}"
+              echo "Cache write skipped (non-fatal)."
+            fi
           fi
         fi
 
