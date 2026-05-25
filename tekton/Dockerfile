@@ -49,7 +49,12 @@ COPY . .
 # web UI + BPF. Skips the client tools (tsh/tbot) and the Rust desktop-access build
 # (rdpclient) — not needed for the IDP server (OIDC/SSH/kube), much faster, Rust-free.
 # build/teleport depends on ensure-webassets, so the web UI is still built + embedded.
-RUN make build/teleport build/tctl OS=linux ARCH=${TELEPORT_ARCH} RDPCLIENT_SKIP_BUILD=1
+#
+# Symlink target/ → $CARGO_TARGET_DIR so that both cargo and the Makefile's
+# hardcoded "target/<arch>/..." wasm-opt/wasm-bindgen steps see the same path.
+# rm -rf first in case a previous layer left a real directory there.
+RUN rm -rf target && ln -s "${CARGO_TARGET_DIR}" target && \
+    make build/teleport build/tctl OS=linux ARCH=${TELEPORT_ARCH} RDPCLIENT_SKIP_BUILD=1
 
 # ---------------------------------------------------------------------------
 
