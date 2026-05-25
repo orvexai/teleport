@@ -123,7 +123,8 @@ spec:
     - ref: github-push-defaults
       kind: ClusterTriggerBinding
     # Map the CEL overlay into the TriggerTemplate param.
-    - name: image-tag
+    - kind: TriggerBinding
+      name: image-tag
       value: $(extensions.image-tag)
   template:
     ref: teleport-build-template

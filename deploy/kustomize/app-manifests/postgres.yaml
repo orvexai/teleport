@@ -22,6 +22,8 @@ spec:
         ensure: present
         login: true
         replication: true
+        inherit: true
+        connectionLimit: -1
   storage:
     storageClass: rook-ceph-block-xfs
     size: 10Gi
