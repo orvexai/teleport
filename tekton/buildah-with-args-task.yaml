@@ -110,10 +110,9 @@ spec:
         #!/bin/bash
         set -eu
 
-        # Use fuse-overlayfs (bundled in the buildah image) via the host /dev/fuse
-        # device (mounted as a volume below). fuse-overlayfs stores each layer as a
-        # compressed tarball and uses CoW overlay mounts, cutting the FROM extraction
-        # from ~15 min (VFS full-copy) to seconds.
+        # privileged: true grants CAP_SYS_ADMIN → native kernel overlayfs works
+        # without fuse-overlayfs. Overlay stores each layer once and uses CoW
+        # mounts, cutting the FROM image extraction from ~15 min (VFS) to seconds.
         mkdir -p /var/lib/containers/storage
         cat > /tmp/storage.conf <<STOREOF
         [storage]
@@ -121,7 +120,6 @@ spec:
         rootless_storage_path = "/var/lib/containers/storage"
         [storage.options.overlay]
         ignore_chown_errors = "true"
-        mount_program = "/usr/bin/fuse-overlayfs"
         STOREOF
         export CONTAINERS_STORAGE_CONF=/tmp/storage.conf
 
