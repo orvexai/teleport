@@ -72,9 +72,13 @@ spec:
           - name: dockerconfig
             secret:
               secretName: tekton-harbor-credentials
+          # emptyDir, not the teleport-build-cache PVC: build-and-push already binds
+          # the `source` PVC, and a second PVC in one TaskRun fails validation
+          # ("more than one PersistentVolumeClaim is bound") in this cluster. emptyDir
+          # keeps intra-build caching; cross-run persistence would need a single PVC
+          # shared via subPaths (source + cache) instead of two separate PVCs.
           - name: build-cache
-            persistentVolumeClaim:
-              claimName: teleport-build-cache
+            emptyDir: {}
 ---
 apiVersion: triggers.tekton.dev/v1beta1
 kind: Trigger
