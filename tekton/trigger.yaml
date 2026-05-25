@@ -80,6 +80,9 @@ spec:
           - name: build-cache
             persistentVolumeClaim:
               claimName: teleport-build-cache
+          - name: layer-cache
+            persistentVolumeClaim:
+              claimName: teleport-buildah-layers
 ---
 apiVersion: triggers.tekton.dev/v1beta1
 kind: Trigger

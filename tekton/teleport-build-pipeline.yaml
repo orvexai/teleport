@@ -65,6 +65,10 @@ spec:
       description: Persistent Go module + build cache (ReadWriteMany PVC)
       optional: true
 
+    - name: layer-cache
+      description: Persistent buildah VFS layer store (ReadWriteMany PVC)
+      optional: true
+
   tasks:
     - name: clone-repo
       taskRef:
@@ -94,6 +98,8 @@ spec:
           workspace: dockerconfig
         - name: build-cache
           workspace: build-cache
+        - name: layer-cache
+          workspace: layer-cache
       params:
         - name: IMAGE
           value: "$(params.image-registry)/$(params.image-namespace)/teleport:$(params.image-tag)"

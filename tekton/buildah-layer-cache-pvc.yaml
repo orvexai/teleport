@@ -1,0 +1,21 @@
+---
+# Persistent buildah layer cache for the Teleport CI build.
+# Stores the VFS-format container image layers between PipelineRuns so the
+# FROM teleport-buildbox pull (~5-10 min from ghcr.io) is skipped on warm runs.
+# ReadWriteMany so multiple concurrent builds can mount it (only one writes at
+# a time in practice — the VFS driver is not concurrent-safe).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: teleport-buildah-layers
+  namespace: tekton-pipelines
+  labels:
+    app.kubernetes.io/name: teleport-buildah-layers
+    app.kubernetes.io/part-of: teleport-fork
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: rook-cephfs
+  resources:
+    requests:
+      storage: 20Gi
