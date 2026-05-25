@@ -1,0 +1,74 @@
+---
+# Builds the CNPG+wal2json image and pushes
+#   repos-direct.eu-central-1.myidp.cloud/cloudnative-pg/postgresql-wal2json:18.1-trixie
+# Tiny (apt only). Self-contained inline pipelineSpec; emptyDir caches (single PVC).
+#   kubectl create -f deploy/dev/cnpg-wal2json/pipelinerun.yaml
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: cnpg-wal2json-build-
+  namespace: tekton-pipelines
+  labels:
+    app.kubernetes.io/name: cnpg-wal2json-build
+    app.kubernetes.io/part-of: teleport-fork
+spec:
+  taskRunTemplate:
+    serviceAccountName: tekton-smoke-test-builder
+  workspaces:
+    - name: source
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteMany"]
+          resources:
+            requests:
+              storage: 5Gi
+          storageClassName: rook-cephfs
+    - name: dockerconfig
+      secret:
+        secretName: tekton-harbor-credentials
+    - name: build-cache
+      emptyDir: {}
+    - name: layer-cache
+      emptyDir: {}
+  pipelineSpec:
+    workspaces:
+      - name: source
+      - name: dockerconfig
+      - name: build-cache
+      - name: layer-cache
+    tasks:
+      - name: clone-repo
+        taskRef:
+          name: git-clone
+        workspaces:
+          - name: output
+            workspace: source
+        params:
+          - name: url
+            value: https://github.com/orvexai/teleport.git
+          - name: revision
+            value: orvex
+          - name: deleteExisting
+            value: "true"
+      - name: build-and-push
+        runAfter: [clone-repo]
+        taskRef:
+          name: buildah-with-args
+        workspaces:
+          - name: source
+            workspace: source
+          - name: dockerconfig
+            workspace: dockerconfig
+          - name: build-cache
+            workspace: build-cache
+          - name: layer-cache
+            workspace: layer-cache
+        params:
+          - name: IMAGE
+            value: "repos-direct.eu-central-1.myidp.cloud/cloudnative-pg/postgresql-wal2json:18.1-trixie"
+          - name: DOCKERFILE
+            value: "deploy/dev/cnpg-wal2json/Dockerfile"
+          - name: CONTEXT
+            value: "."
+          - name: TLS_VERIFY
+            value: "false"
