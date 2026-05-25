@@ -28,6 +28,10 @@ auth_service:
   authentication:
     type: local
     second_factors: ["otp", "webauthn"]
+    # webauthn requires rp_id = the web origin's host (no scheme/port); must match
+    # proxy_service.public_addr's host or registered authenticators won't validate.
+    webauthn:
+      rp_id: tp-dev.eu-central-1.myidp.cloud
 
 proxy_service:
   enabled: true
