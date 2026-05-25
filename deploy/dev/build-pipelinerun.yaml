@@ -29,14 +29,11 @@ spec:
         secretName: tekton-harbor-credentials
     - name: build-cache
       emptyDir: {}
-    - name: layer-cache
-      emptyDir: {}
   pipelineSpec:
     workspaces:
       - name: source
       - name: dockerconfig
       - name: build-cache
-      - name: layer-cache
     tasks:
       - name: clone-repo
         taskRef:
@@ -62,8 +59,6 @@ spec:
             workspace: dockerconfig
           - name: build-cache
             workspace: build-cache
-          - name: layer-cache
-            workspace: layer-cache
         params:
           - name: IMAGE
             value: "repos-direct.eu-central-1.myidp.cloud/teleport/teleport-dev:dev"
