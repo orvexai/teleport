@@ -9,6 +9,16 @@ teleport:
   log:
     output: stderr
     severity: INFO
+  # Postgres backend (pgbk state + pgevents audit) + S3 session recordings, mirroring
+  # prod. Password comes from PGPASSWORD env (set on the dev pod from the CNPG secret),
+  # so it stays out of this file.
+  storage:
+    type: postgresql
+    conn_string: "postgresql://teleport@teleport-db-rw.teleport-dev.svc:5432/teleport?sslmode=require&pool_max_conns=20"
+    change_feed_conn_string: "postgresql://teleport@teleport-db-rw.teleport-dev.svc:5432/teleport?sslmode=require&pool_max_conns=10"
+    audit_events_uri:
+      - "postgres://teleport@teleport-db-rw.teleport-dev.svc:5432/teleport?sslmode=require"
+    audit_sessions_uri: "s3://teleport-dev-sessions?endpoint=rook-ceph-rgw-ceph-objectstore.rook-ceph.svc:80&region=us-east-1&insecure=true&disablesse=true"
 
 auth_service:
   enabled: true

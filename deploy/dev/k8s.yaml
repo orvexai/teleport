@@ -167,6 +167,26 @@ spec:
                 secretKeyRef:
                   name: teleport-oidc-secret
                   key: client_secret
+            # DB + S3 creds (optional: the build pod still starts before CNPG/OBC
+            # provision; teleport picks them up on the next restart once present).
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: teleport-db-app
+                  key: password
+                  optional: true
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: teleport-dev-sessions-bucket
+                  key: AWS_ACCESS_KEY_ID
+                  optional: true
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: teleport-dev-sessions-bucket
+                  key: AWS_SECRET_ACCESS_KEY
+                  optional: true
             # Build caches on the 40Gi workspace PVC so they survive restarts (the
             # buildbox defaults put GOMODCACHE/CARGO_HOME on ephemeral image paths).
             - name: GOCACHE
@@ -274,3 +294,52 @@ spec:
           name: teleport-dev
           port: 3080
           weight: 1
+---
+# Postgres backend for the dev teleport (pgbk + pgevents). CNPG creates teleport-db-app
+# (password → PGPASSWORD). Single instance (dev-grade).
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: teleport-db
+  namespace: teleport-dev
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.1-system-trixie  # CHECKED: 2026-05-25
+  bootstrap:
+    initdb:
+      database: teleport
+      owner: teleport
+  managed:
+    roles:
+      - name: teleport
+        ensure: present
+        login: true
+        replication: true
+  storage:
+    storageClass: rook-ceph-block-xfs
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  postgresql:
+    parameters:
+      wal_level: "logical"
+      max_connections: "200"
+---
+# S3 bucket (Ceph RGW) for the dev teleport's session recordings → secret
+# teleport-dev-sessions-bucket (AWS creds). Distinct bucket name from prod.
+apiVersion: platform.myidp.io/v1alpha1
+kind: ObjectStorageClaim
+metadata:
+  name: teleport-dev-sessions
+  namespace: teleport-dev
+  annotations:
+    argocd.argoproj.io/sync-options: ServerSideApply=false
+spec:
+  bucketName: teleport-dev-sessions
+  maxSize: "50Gi"
+  maxObjects: "1000000"
