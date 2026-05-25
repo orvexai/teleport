@@ -261,9 +261,20 @@ func (s *OIDCLoginService) ValidateOIDCAuthCallback(ctx context.Context, q url.V
 		)
 	}
 
+	// Resolve username: use the configured username_claim if set, otherwise fall back to sub.
+	// (Used below for session TTL calculation and user params.)
+	username := subject
+	if claimName := connector.GetUsernameClaim(); claimName != "" {
+		if v, ok := claims[claimName]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				username = s
+			}
+		}
+	}
+
 	// Calculate session TTL.
 	fetchedRoles, err := services.FetchRolesWithContext(roles, s.authServer, services.RoleTemplateContext{
-		Username: subject,
+		Username: username,
 		Traits:   traits,
 	})
 	if err != nil {
@@ -275,7 +286,7 @@ func (s *OIDCLoginService) ValidateOIDCAuthCallback(ctx context.Context, q url.V
 	// Build user params.
 	p := &oidcUserParams{
 		connectorName: req.ConnectorID,
-		username:      subject,
+		username:      username,
 		roles:         roles,
 		traits:        traits,
 		sessionTTL:    sessionTTL,

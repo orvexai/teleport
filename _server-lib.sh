@@ -90,14 +90,51 @@ spec:
   client_id: teleport
   client_secret: "${OIDC_CLIENT_SECRET}"
   redirect_url: "https://${TELEPORT_DEV_HOST:-tp-dev.eu-central-1.myidp.cloud}/v1/webapi/oidc/callback"
+  # preferred_username gives the human-readable Keycloak username instead of the UUID sub claim.
+  username_claim: preferred_username
   scope: ["openid", "email", "profile", "groups"]
   pkce_mode: "enabled"
   claims_to_roles:
+    # Elevated access for specific groups.
     - claim: groups
       value: Administrators
       roles: ["editor", "access", "auditor"]
     - claim: groups
       value: "Platform Team"
+      roles: ["editor", "access"]
+    - claim: groups
+      value: Developers
+      roles: ["access"]
+    - claim: groups
+      value: "Orvex AI Developers"
+      roles: ["access"]
+    # Catch-all: any Keycloak group member can log in with base access.
+    # New groups added in Keycloak automatically get access without connector changes.
+    - claim: groups
+      value: "*"
       roles: ["access"]
 EOF
+    _apply_login_rule "$tag"
+}
+
+# Apply an Administrators role that grants SSH login as the OIDC preferred_username.
+# On Teleport Enterprise you could use login_rule instead; on OSS we template the role.
+_apply_login_rule() {
+    local tag=${1:-server}
+    echo "[$tag] Applying Administrators role (SSH login from preferred_username)..."
+    "${REPO_DIR}/build/tctl" --config "${TELEPORT_CONFIG_FILE:-${REPO_DIR}/deploy/dev/teleport.yaml}" \
+        create -f - --force <<'LREOF' || echo "[$tag] WARN: role apply failed"
+kind: role
+version: v7
+metadata:
+  name: Administrators
+spec:
+  allow:
+    logins:
+      - "{{external.preferred_username}}"
+      - "{{internal.logins}}"
+    rules:
+      - resources: ["*"]
+        verbs: ["*"]
+LREOF
 }
