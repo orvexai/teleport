@@ -59,6 +59,11 @@ spec:
             value: $(tt.params.image-tag)
         taskRunTemplate:
           serviceAccountName: tekton-smoke-test-builder
+          podTemplate:
+            # fsGroup: 1000 causes the kubelet to chown PVC mount roots to GID 1000
+            # so the buildah step (runAsUser: 1000) can write into the cache PVC.
+            securityContext:
+              fsGroup: 1000
         workspaces:
           - name: source
             volumeClaimTemplate:
@@ -72,13 +77,9 @@ spec:
           - name: dockerconfig
             secret:
               secretName: tekton-harbor-credentials
-          # emptyDir, not the teleport-build-cache PVC: build-and-push already binds
-          # the `source` PVC, and a second PVC in one TaskRun fails validation
-          # ("more than one PersistentVolumeClaim is bound") in this cluster. emptyDir
-          # keeps intra-build caching; cross-run persistence would need a single PVC
-          # shared via subPaths (source + cache) instead of two separate PVCs.
           - name: build-cache
-            emptyDir: {}
+            persistentVolumeClaim:
+              claimName: teleport-build-cache
 ---
 apiVersion: triggers.tekton.dev/v1beta1
 kind: Trigger
