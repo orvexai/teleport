@@ -53,7 +53,7 @@ spec:
                 - -c
                 - |
                   set -eu
-                  KEEP=10
+                  KEEP=3
                   NS=tekton-pipelines
 
                   echo "=== PipelineRun pruner: keeping newest $KEEP ==="
