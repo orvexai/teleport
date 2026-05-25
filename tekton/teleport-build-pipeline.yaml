@@ -65,9 +65,6 @@ spec:
       description: Persistent Go module + build cache (ReadWriteMany PVC)
       optional: true
 
-    - name: layer-cache
-      description: Persistent buildah VFS layer store (ReadWriteMany PVC)
-      optional: true
 
   tasks:
     - name: clone-repo
@@ -98,8 +95,6 @@ spec:
           workspace: dockerconfig
         - name: build-cache
           workspace: build-cache
-        - name: layer-cache
-          workspace: layer-cache
       params:
         - name: IMAGE
           value: "$(params.image-registry)/$(params.image-namespace)/teleport:$(params.image-tag)"
@@ -109,6 +104,8 @@ spec:
           value: "."
         - name: BUILD_ARG_1
           value: "TELEPORT_ARCH=$(params.teleport-arch)"
+        - name: BUILD_ARG_2
+          value: "BUILDBOX=repos.eu-central-1.myidp.cloud/ghcr-cache/gravitational/teleport-buildbox:teleport19"
         - name: TLS_VERIFY
           # repos-direct serves a cert the buildah container's CA bundle doesn't
           # trust; the push stays on the cluster network so we trust it implicitly.

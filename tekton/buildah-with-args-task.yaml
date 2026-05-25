@@ -85,12 +85,6 @@ spec:
         bound, mounted at /tmp/ci/go inside every RUN step via buildah --volume.
       optional: true
 
-    - name: layer-cache
-      description: Persistent buildah VFS layer store (ReadWriteMany PVC). When
-        bound, replaces the emptyDir-backed /var/lib/containers/storage so the
-        FROM teleport-buildbox pull is skipped on warm runs.
-      optional: true
-
   steps:
     - name: build-and-push
       image: quay.io/buildah/stable:v1.42.2
@@ -116,19 +110,12 @@ spec:
         #!/bin/bash
         set -eu
 
-        # Configure rootless storage — use persistent layer cache PVC if bound,
-        # otherwise fall back to the emptyDir at /var/lib/containers/storage.
-        if [ "$(workspaces.layer-cache.bound)" == "true" ]; then
-          LAYER_STORE="$(workspaces.layer-cache.path)"
-          echo "Layer cache: persistent PVC at $LAYER_STORE"
-        else
-          mkdir -p /var/lib/containers/storage
-          LAYER_STORE="/var/lib/containers/storage"
-        fi
+        # Configure rootless storage to use the emptyDir-backed volume.
+        mkdir -p /var/lib/containers/storage
         cat > /tmp/storage.conf <<STOREOF
         [storage]
         driver = "vfs"
-        rootless_storage_path = "${LAYER_STORE}"
+        rootless_storage_path = "/var/lib/containers/storage"
         [storage.options.vfs]
         ignore_chown_errors = "true"
         STOREOF

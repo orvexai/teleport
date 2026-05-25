@@ -14,7 +14,6 @@ namespace: tekton-pipelines
 
 resources:
   - build-cache-pvc.yaml
-  - buildah-layer-cache-pvc.yaml
   - buildah-with-args-task.yaml
   - teleport-build-pipeline.yaml
   - trigger.yaml
