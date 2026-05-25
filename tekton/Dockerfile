@@ -52,6 +52,10 @@ FROM debian:12-slim AS teleport
 
 # Runtime deps: PAM/audit/cap-ng are dynamically linked by the teleport binary;
 # ca-certificates is required for OIDC (Keycloak) TLS; dumb-init reaps zombies.
+# libfido2-1 is required by tctl/tsh (this build links libfido2 dynamically, unlike
+# the upstream release which links it statically); apt pulls its deps (libcbor etc.).
+# The buildbox is Debian-bookworm-based, so this matches the .so the binaries linked
+# against. Without it, tctl/tsh fail with "libfido2.so.1: cannot open shared object".
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -59,6 +63,7 @@ RUN apt-get update \
         libpam0g \
         libaudit1 \
         libcap-ng0 \
+        libfido2-1 \
     && rm -rf /var/lib/apt/lists/*
 
 ARG TELEPORT_SRC=/go/src/github.com/gravitational/teleport/build
