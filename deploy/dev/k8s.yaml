@@ -167,6 +167,16 @@ spec:
                 secretKeyRef:
                   name: teleport-oidc-secret
                   key: client_secret
+            # Build caches on the 40Gi workspace PVC so they survive restarts (the
+            # buildbox defaults put GOMODCACHE/CARGO_HOME on ephemeral image paths).
+            - name: GOCACHE
+              value: /workspace/.cache/go-build
+            - name: GOMODCACHE
+              value: /workspace/.cache/go-mod
+            - name: CARGO_HOME
+              value: /workspace/.cache/cargo
+            - name: GOFLAGS
+              value: "-p=8"
           volumeMounts:
             - name: workspace
               mountPath: /workspace
@@ -174,11 +184,13 @@ spec:
               mountPath: /home/dev
           resources:
             requests:
-              cpu: "1"
-              memory: 2Gi
+              cpu: "2"
+              memory: 4Gi
             limits:
-              cpu: "6"
-              memory: 10Gi
+              # Matches the prod teleport-build pipeline — make full (Rust + Go + web
+              # UI in parallel) peaks well above 10Gi and will OOM otherwise.
+              cpu: "11"
+              memory: 24Gi
       volumes:
         - name: workspace
           persistentVolumeClaim:
