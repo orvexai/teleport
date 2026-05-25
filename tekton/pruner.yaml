@@ -45,9 +45,11 @@ spec:
         spec:
           serviceAccountName: tekton-pruner
           restartPolicy: OnFailure
+          imagePullSecrets:
+            - name: tekton-harbor-credentials
           containers:
             - name: pruner
-              image: bitnami/kubectl:1.32.3
+              image: repos.eu-central-1.myidp.cloud/dockerhub-cache/alpine/k8s:1.31.4
               command:
                 - /bin/sh
                 - -c
