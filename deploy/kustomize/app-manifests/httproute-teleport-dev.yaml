@@ -20,7 +20,7 @@ spec:
       kind: Gateway
       name: platform-gateway
       namespace: traefik
-      sectionName: websecure
+      sectionName: tp-dev-websecure
   rules:
     - matches:
         - path:
