@@ -49,8 +49,35 @@ echo "[dev-start] Building teleport + tctl (incremental; skip web + Rust RDP)...
 # RDPCLIENT_SKIP_BUILD=1: skip the Rust desktop-access (rdpclient) build — not needed
 # for OIDC dev/testing, and it avoids the Rust toolchain entirely (faster, no override
 # mismatch). build/teleport + build/tctl don't pull in fdpass, so this build is Rust-free.
-make build/teleport build/tctl OS=linux ARCH=amd64 WEBASSETS_SKIP_BUILD=1 RDPCLIENT_SKIP_BUILD=1 2>&1 \
-    || echo "[dev-start] WARN: build exited non-zero (continuing with existing binaries)"
+#
+# We build in two phases:
+# 1. tctl + sessionhelper via make (no web asset dependency).
+# 2. teleport binary via go build directly — this preserves any existing production
+#    webassets/teleport/index.html (WEBASSETS_SKIP_BUILD=1 would overwrite it with the
+#    Vite dev-server index.html that references /src/boot.tsx, leaving a blank UI).
+make build/tctl session/reexec/embed/sessionhelper OS=linux ARCH=amd64 WEBASSETS_SKIP_BUILD=1 RDPCLIENT_SKIP_BUILD=1 2>&1 \
+    || echo "[dev-start] WARN: tctl/sessionhelper build exited non-zero"
+
+# Ensure production web assets are in place before embedding them.
+_PROD_INDEX="${REPO_DIR}/webassets/teleport/index.html"
+_PROD_JS="${REPO_DIR}/webassets/teleport/app/app.js.br"
+if [ -f "$_PROD_JS" ] && grep -q '/web/app/app.js' "$_PROD_INDEX" 2>/dev/null; then
+    echo "[dev-start] Production web assets present — embedding into teleport binary..."
+else
+    echo "[dev-start] WARN: no production web assets; UI will be blank. Run 'make build-ui' then dev-restart to fix."
+    mkdir -p "${REPO_DIR}/webassets/teleport/app"
+    cp "${REPO_DIR}/web/packages/teleport/index.html" "$_PROD_INDEX"
+fi
+
+# Match the Makefile's KUBECTL_SETVERSION (embedded kubectl version string).
+_KUBECTL_VERSION=$(cd "$REPO_DIR" && go list -m -f '{{.Version}}' k8s.io/kubectl 2>/dev/null | sed 's/v0/v1/')
+GOOS=linux GOARCH=amd64 CGO_ENABLED=1 CGO_LDFLAGS="-Wl,-Bstatic -Wl,-Bdynamic -Wl,--as-needed" \
+    go build -tags "grpcnotrace webassets_embed pam bpf sessionhelper_embed kustomize_disable_go_plugin_support" \
+    -o "${REPO_DIR}/build/teleport" \
+    -ldflags "-w -s -X k8s.io/component-base/version.gitVersion=${_KUBECTL_VERSION:-v1.35.1}" \
+    -trimpath -buildvcs=false \
+    "${REPO_DIR}/tool/teleport" 2>&1 \
+    || echo "[dev-start] WARN: teleport build exited non-zero (continuing with existing binary)"
 [ -x "${REPO_DIR}/build/teleport" ] || { echo "[dev-start] ERROR: no teleport binary — staying alive"; while true; do sleep 60; done; }
 
 echo "[dev-start] Starting teleport (web :3080, TLS terminated at the ingress)..."
