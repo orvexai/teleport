@@ -49,7 +49,7 @@ spec:
             - name: tekton-harbor-credentials
           containers:
             - name: pruner
-              image: repos.eu-central-1.myidp.cloud/dockerhub-cache/alpine/k8s:1.31.4
+              image: repos.eu-central-1.myidp.cloud/dockerhub-cache/alpine/k8s:1.36.1
               command:
                 - /bin/sh
                 - -c
