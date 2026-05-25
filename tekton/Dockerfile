@@ -34,9 +34,12 @@ USER root
 
 # Keep Go/Cargo caches on writable, root-owned paths (the buildbox defaults live
 # under /tmp/build owned by the teleport user).
+# CARGO_TARGET_DIR puts compiled Rust artifacts on the persistent cache PVC so
+# subsequent runs skip re-compiling the ironrdp WASM (and any other Rust code).
 ENV GOPATH=/tmp/ci/go \
     GOCACHE=/tmp/ci/go/build \
     CARGO_HOME=/tmp/ci/rust \
+    CARGO_TARGET_DIR=/tmp/ci/rust-target \
     HOME=/tmp/ci
 
 WORKDIR /go/src/github.com/gravitational/teleport
