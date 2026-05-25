@@ -6,6 +6,7 @@
 #   go/build      — compiled Go packages (GOCACHE, ~2-3 GB)
 #   yarn          — Yarn package cache for the web UI (~500 MB)
 # First build populates it; subsequent builds save ~10-15 minutes.
+# 30Gi: Go modules+cache ~3Gi, Rust/Cargo ~5Gi, Yarn ~1Gi, headroom for growth.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -20,4 +21,4 @@ spec:
   storageClassName: rook-cephfs
   resources:
     requests:
-      storage: 10Gi
+      storage: 30Gi
