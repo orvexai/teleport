@@ -135,6 +135,33 @@ spec:
       serviceAccountName: teleport-dev
       imagePullSecrets:
         - name: harbor-registry-credentials
+      # Run as the non-root dev user (uid/gid 1000, baked into the image). fsGroup makes
+      # newly-written volume files group-1000; OnRootMismatch avoids re-chowning the
+      # whole 40Gi workspace on every mount.
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+      initContainers:
+        # One-time migration: the PVCs were first populated while the pod ran as root,
+        # so chown their contents to the dev user. Runs as root; idempotent — skips when
+        # the mount root is already 1000-owned, so it's a fast no-op on later restarts.
+        - name: fix-perms
+          image: repos.eu-central-1.myidp.cloud/teleport/teleport-dev:dev
+          imagePullPolicy: Always
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+          command:
+            - sh
+            - -c
+            - 'for d in /home/dev /workspace; do [ "$(stat -c %u "$d")" = 1000 ] || { echo "chown -R 1000:1000 $d"; chown -R 1000:1000 "$d"; }; done'
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: home
+              mountPath: /home/dev
       containers:
         - name: dev
           image: repos.eu-central-1.myidp.cloud/teleport/teleport-dev:dev

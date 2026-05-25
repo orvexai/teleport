@@ -25,20 +25,14 @@ else
     echo "[entrypoint] Existing repo at ${REPO_DIR} — leaving in place"
 fi
 
-if [ ! -f "${HOME_DIR}/.bashrc.teleport-dev-bootstrapped" ]; then
-    echo "[entrypoint] First-time home bootstrap into ${HOME_DIR}"
-    cat >> "${HOME_DIR}/.bashrc" <<'EOF'
-
-# teleport-dev pod defaults
-export PS1='\[\e[35m\]teleport-dev\[\e[0m\]:\[\e[36m\]\w\[\e[0m\]$ '
-alias ll='ls -lah'
-cd /workspace/teleport 2>/dev/null || true
-EOF
-    cat >> "${HOME_DIR}/.bash_profile" <<'EOF'
-[ -f ~/.bashrc ] && . ~/.bashrc
-EOF
-    touch "${HOME_DIR}/.bashrc.teleport-dev-bootstrapped"
-fi
+# Make interactive shells load the image-baked profile (PATH, prompt, completions,
+# aliases). The profile lives in the image (/etc/profile.d/zz-teleport-dev.sh) so a
+# rebuild updates it; ~/.bashrc on the home PVC just sources it. Idempotent each boot.
+touch "${HOME_DIR}/.bashrc" "${HOME_DIR}/.bash_profile"
+grep -qF 'zz-teleport-dev.sh' "${HOME_DIR}/.bashrc" \
+    || printf '\n# teleport-dev: load image-baked profile\n[ -f /etc/profile.d/zz-teleport-dev.sh ] && . /etc/profile.d/zz-teleport-dev.sh\n' >> "${HOME_DIR}/.bashrc"
+grep -qF '.bashrc' "${HOME_DIR}/.bash_profile" \
+    || printf '[ -f ~/.bashrc ] && . ~/.bashrc\n' >> "${HOME_DIR}/.bash_profile"
 
 cd "${REPO_DIR}" 2>/dev/null || cd "${WORKSPACE_DIR}"
 exec "$@"
