@@ -90,7 +90,7 @@ spec:
       image: quay.io/buildah/stable:v1.42.2
       workingDir: $(workspaces.source.path)
       securityContext:
-        runAsNonRoot: true
+        privileged: true
         runAsUser: 1000
       # A full Teleport build (Go + Rust + web UI) is memory- and CPU-hungry.
       # Tune to your nodes / namespace LimitRange; these are a sane starting point.
@@ -183,13 +183,7 @@ spec:
       volumeMounts:
         - name: varlibcontainers
           mountPath: /var/lib/containers
-        - name: dev-fuse
-          mountPath: /dev/fuse
 
   volumes:
     - name: varlibcontainers
       emptyDir: {}
-    - name: dev-fuse
-      hostPath:
-        path: /dev/fuse
-        type: CharDevice
