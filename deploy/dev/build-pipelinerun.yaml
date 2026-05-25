@@ -27,8 +27,19 @@ spec:
     - name: dockerconfig
       secret:
         secretName: tekton-harbor-credentials
+    # build-cache backs buildah's /var/lib/containers. It MUST be a real PVC, not an
+    # emptyDir: an emptyDir lands on the node's overlay rootfs, so buildah falls back to
+    # fuse-overlayfs (needs /dev/fuse, absent here → "fuse: device not found"). A cephfs
+    # PVC lets it work like the teleport-build pipeline. Per-run template (no shared
+    # state, won't collide with concurrent teleport-build runs).
     - name: build-cache
-      emptyDir: {}
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteMany"]
+          resources:
+            requests:
+              storage: 30Gi
+          storageClassName: rook-cephfs
   pipelineSpec:
     workspaces:
       - name: source
