@@ -125,6 +125,23 @@ spec:
         STOREOF
         export CONTAINERS_STORAGE_CONF=/tmp/storage.conf
 
+        # Route ghcr.io pulls through the in-cluster Harbor proxy cache so cold
+        # runs hit LAN speeds instead of the public internet.
+        cat > /tmp/registries.conf <<REGEOF
+        unqualified-search-registries = []
+        short-name-mode = "disabled"
+
+        [[registry]]
+        prefix   = "ghcr.io"
+        location = "ghcr.io"
+        insecure = false
+
+        [[registry.mirror]]
+        location = "repos-direct.eu-central-1.myidp.cloud/ghcr-cache"
+        insecure = false
+        REGEOF
+        export CONTAINERS_REGISTRIES_CONF=/tmp/registries.conf
+
         # Pre-warm the local store from the PVC OCI cache. On first run: pull from
         # registry, write to temp dir, atomic rename → cache. Concurrent first runs:
         # one wins the rename; others proceed with the registry pull (safe fallback).
