@@ -32,9 +32,10 @@ RUN curl -fsSL https://github.com/cli/cli/releases/download/v2.65.0/gh_2.65.0_li
 # Claude Code CLI (the buildbox ships node/npm for the web UI build)
 RUN npm install -g @anthropic-ai/claude-code
 
+# Only the entrypoint is baked in; dev-start.sh / dev-restart.sh / prod-*.sh +
+# _server-lib.sh live at the repo root and arrive via the clone into /workspace.
 COPY deploy/dev/entrypoint.sh /usr/local/bin/teleport-dev-entrypoint.sh
-COPY deploy/dev/build-teleport.sh /usr/local/bin/build-teleport.sh
-RUN chmod +x /usr/local/bin/teleport-dev-entrypoint.sh /usr/local/bin/build-teleport.sh
+RUN chmod +x /usr/local/bin/teleport-dev-entrypoint.sh
 
 WORKDIR /workspace
 ENTRYPOINT ["/usr/local/bin/teleport-dev-entrypoint.sh"]

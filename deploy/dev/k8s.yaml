@@ -139,6 +139,16 @@ spec:
         - name: dev
           image: repos.eu-central-1.myidp.cloud/teleport/teleport-dev:dev
           imagePullPolicy: Always
+          stdin: true
+          tty: true
+          # entrypoint clones the fork into /workspace, then dev-start.sh builds+runs
+          # teleport (self-daemonizes, exits 0); sleep infinity keeps the pod alive.
+          # Restart with: kubectl exec -it <pod> -- /workspace/teleport/dev-restart.sh
+          command: ["/usr/local/bin/teleport-dev-entrypoint.sh"]
+          args: ["/bin/sh", "-c", "/workspace/teleport/dev-start.sh || true; exec sleep infinity"]
+          ports:
+            - name: web
+              containerPort: 3080
           env:
             - name: HOME
               value: /home/dev
@@ -146,6 +156,17 @@ spec:
               value: /workspace
             - name: GIT_BRANCH
               value: orvex
+            - name: CLAUDE_REMOTE_ACCESSIBLE
+              value: "true"
+            - name: KEYCLOAK_HOST
+              value: auth.eu-central-1.myidp.cloud
+            - name: TELEPORT_DEV_HOST
+              value: tp-dev.eu-central-1.myidp.cloud
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: teleport-oidc-secret
+                  key: client_secret
           volumeMounts:
             - name: workspace
               mountPath: /workspace
@@ -165,3 +186,79 @@ spec:
         - name: home
           persistentVolumeClaim:
             claimName: teleport-dev-home
+---
+# OIDC client secret (Keycloak teleport client) — consumed by dev-start.sh's
+# _apply_oidc_connector to create the connector via tctl.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: teleport-oidc-credentials
+  namespace: teleport-dev
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: openbao-backend
+    kind: ClusterSecretStore
+  target:
+    name: teleport-oidc-secret
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      type: Opaque
+      data:
+        client_secret: "{{ .client_secret }}"
+  data:
+    - secretKey: client_secret
+      remoteRef:
+        key: keycloak/teleport-oidc
+        property: client_secret
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: teleport-dev
+  namespace: teleport-dev
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: teleport-dev
+  ports:
+    - name: web
+      port: 3080
+      targetPort: web
+---
+# Web/OIDC exposure via Traefik (Cloudflare-proxied, like docmost-dev). teleport runs
+# with --insecure-no-tls behind this; TLS is terminated at the gateway. tsh/SSH would
+# need the dedicated-LB path (prod) — this dev route is for the web OIDC flow.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: teleport-dev
+  namespace: teleport-dev
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: "tp-dev.eu-central-1.myidp.cloud"
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
+    external-dns.alpha.kubernetes.io/target: "37.27.73.18"
+spec:
+  hostnames:
+    - tp-dev.eu-central-1.myidp.cloud
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: platform-gateway
+      namespace: traefik
+      sectionName: websecure
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: teleport-dev
+          port: 3080
+          weight: 1

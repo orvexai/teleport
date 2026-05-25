@@ -1,0 +1,29 @@
+# Dev teleport config — standalone auth+proxy, run by dev-start.sh/prod-start.sh
+# inside the teleport-dev pod with `--insecure-no-tls` (TLS is terminated at the
+# Traefik HTTPRoute, like docmost-dev). public_addr is the external dev hostname so
+# OIDC redirect URLs + web sessions resolve correctly behind the ingress.
+version: v3
+teleport:
+  nodename: tp-dev
+  data_dir: /home/dev/teleport-data
+  log:
+    output: stderr
+    severity: INFO
+
+auth_service:
+  enabled: true
+  cluster_name: tp-dev.eu-central-1.myidp.cloud
+  listen_addr: 0.0.0.0:3025
+  proxy_listener_mode: multiplex
+  authentication:
+    type: local
+    second_factors: ["otp", "webauthn"]
+
+proxy_service:
+  enabled: true
+  # External address (via the Traefik HTTPRoute) — drives OIDC redirect_url + cookies.
+  public_addr: tp-dev.eu-central-1.myidp.cloud:443
+  web_listen_addr: 0.0.0.0:3080
+
+ssh_service:
+  enabled: false
