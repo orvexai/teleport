@@ -15,6 +15,16 @@ metadata:
 spec:
   taskRunTemplate:
     serviceAccountName: tekton-smoke-test-builder
+    # buildah falls back to fuse-overlayfs (cephfs/overlay-on-overlay can't do native
+    # overlay), so the build pod MUST land on a node that has the fuse module + /dev/fuse.
+    # node-5 lacks it ("fuse: device not found"); node-1/node-4 have it (where the
+    # teleport-build pipeline succeeds). Pin to a known-good node. fsGroup 1000 lets the
+    # buildah user write the cephfs build-cache PVC (matches teleport-build's podTemplate).
+    podTemplate:
+      securityContext:
+        fsGroup: 1000
+      nodeSelector:
+        kubernetes.io/hostname: node-4.eu-central-1.myidp.cloud
   workspaces:
     - name: source
       volumeClaimTemplate:
