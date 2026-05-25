@@ -133,16 +133,14 @@ spec:
         [ -n "$(params.BUILD_ARG_3)" ] && BUILD_ARGS="$BUILD_ARGS --build-arg $(params.BUILD_ARG_3)"
         [ -n "$(params.BUILD_ARG_4)" ] && BUILD_ARGS="$BUILD_ARGS --build-arg $(params.BUILD_ARG_4)"
 
-        # Mount cache if workspace is bound AND writable (emptyDir is root-owned;
-        # this step runs as UID 1000, so mkdir may fail — degrade gracefully).
+        # Mount the entire /tmp/ci tree from the persistent PVC.
+        # This covers GOPATH+GOCACHE (/tmp/ci/go), CARGO_HOME (/tmp/ci/rust),
+        # and the Yarn classic cache ($HOME/.cache/yarn = /tmp/ci/.cache/yarn).
+        # fsGroup: 1000 in the pod template makes the PVC root writable.
         CACHE_VOLUME=""
         if [ "$(workspaces.build-cache.bound)" == "true" ]; then
-          if mkdir -p "$(workspaces.build-cache.path)/go" 2>/dev/null; then
-            CACHE_VOLUME="--volume $(workspaces.build-cache.path)/go:/tmp/ci/go:rw"
-            echo "Build cache: $(workspaces.build-cache.path)/go -> /tmp/ci/go"
-          else
-            echo "Build cache: workspace bound but not writable (skipping)"
-          fi
+          CACHE_VOLUME="--volume $(workspaces.build-cache.path):/tmp/ci:rw"
+          echo "Build cache: $(workspaces.build-cache.path) -> /tmp/ci (go + rust + yarn)"
         fi
 
         echo "Building image: $(params.IMAGE)"
