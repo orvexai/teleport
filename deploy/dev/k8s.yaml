@@ -299,7 +299,6 @@ metadata:
   annotations:
     external-dns.alpha.kubernetes.io/hostname: "tp-dev.eu-central-1.myidp.cloud"
     external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
-    external-dns.alpha.kubernetes.io/target: "37.27.73.18"
 spec:
   hostnames:
     - tp-dev.eu-central-1.myidp.cloud
@@ -328,7 +327,6 @@ metadata:
   annotations:
     external-dns.alpha.kubernetes.io/hostname: "tp-dev.eu-central-1.myidp.cloud"
     external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
-    external-dns.alpha.kubernetes.io/target: "37.27.73.18"
 spec:
   hostnames:
     - tp-dev.eu-central-1.myidp.cloud
