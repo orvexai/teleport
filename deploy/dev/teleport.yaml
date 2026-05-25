@@ -24,7 +24,11 @@ auth_service:
   enabled: true
   cluster_name: tp-dev.eu-central-1.myidp.cloud
   listen_addr: 0.0.0.0:3025
-  proxy_listener_mode: multiplex
+  # separate (not multiplex): the dev proxy runs --insecure-no-tls behind Traefik
+  # (TLS terminated at the HTTPRoute). multiplex builds a TLS-ALPN/SNI listener that
+  # teleport only creates when TLS is enabled, so with --insecure-no-tls it is nil
+  # → "listener cannot be nil". Prod keeps multiplex (it terminates its own TLS).
+  proxy_listener_mode: separate
   authentication:
     type: local
     second_factors: ["otp", "webauthn"]
