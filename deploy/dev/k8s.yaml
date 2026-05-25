@@ -304,7 +304,10 @@ metadata:
   namespace: teleport-dev
 spec:
   instances: 1
-  imageName: ghcr.io/cloudnative-pg/postgresql:18.1-system-trixie  # CHECKED: 2026-05-25
+  # CNPG + wal2json (pgbk change feed needs it) — built by deploy/dev/cnpg-wal2json.
+  imageName: repos.eu-central-1.myidp.cloud/teleport/postgresql-wal2json:18.1-trixie  # CHECKED: 2026-05-25
+  imagePullSecrets:
+    - name: harbor-registry-credentials
   bootstrap:
     initdb:
       database: teleport

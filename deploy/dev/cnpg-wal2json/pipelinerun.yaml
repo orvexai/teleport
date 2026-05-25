@@ -64,8 +64,10 @@ spec:
           - name: layer-cache
             workspace: layer-cache
         params:
+          # Push into the existing `teleport` Harbor project (Harbor doesn't auto-create
+          # projects on push, so a new `cloudnative-pg` project 401s).
           - name: IMAGE
-            value: "repos-direct.eu-central-1.myidp.cloud/cloudnative-pg/postgresql-wal2json:18.1-trixie"
+            value: "repos-direct.eu-central-1.myidp.cloud/teleport/postgresql-wal2json:18.1-trixie"
           - name: DOCKERFILE
             value: "deploy/dev/cnpg-wal2json/Dockerfile"
           - name: CONTEXT
