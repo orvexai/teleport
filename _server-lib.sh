@@ -78,7 +78,7 @@ _apply_oidc_connector() {
     local tag=${_SERVER_TAG:-server}
     [ -z "${OIDC_CLIENT_SECRET:-}" ] && { echo "[$tag] OIDC_CLIENT_SECRET unset — skipping connector"; return 0; }
     echo "[$tag] Applying Keycloak OIDC connector (local tctl)..."
-    "${REPO_DIR}/build/tctl" --config "${TELEPORT_CONFIG:-${REPO_DIR}/deploy/dev/teleport.yaml}" \
+    "${REPO_DIR}/build/tctl" --config "${TELEPORT_CONFIG_FILE:-${REPO_DIR}/deploy/dev/teleport.yaml}" \
         create -f - --force <<EOF || echo "[$tag] WARN: connector apply failed"
 kind: oidc
 version: v3

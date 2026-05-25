@@ -39,7 +39,9 @@ _set_repo_dir
 cd "$REPO_DIR"
 _load_dotenv
 _set_git_sha
-export TELEPORT_CONFIG="${REPO_DIR}/deploy/dev/teleport.yaml"
+# TELEPORT_CONFIG_FILE = config *path*. NOT TELEPORT_CONFIG, which teleport/tctl treat
+# as an inline base64 config string (→ "configuration should be base64 encoded").
+export TELEPORT_CONFIG_FILE="${REPO_DIR}/deploy/dev/teleport.yaml"
 
 echo "[prod-start] Server build (teleport + tctl + fresh web UI; no Rust/client tools)..."
 # Server-side only (matches the CI image): teleport + tctl + embedded web UI, skipping
@@ -49,7 +51,7 @@ make build/teleport build/tctl OS=linux ARCH=amd64 RDPCLIENT_SKIP_BUILD=1 2>&1 |
 [ -x "${REPO_DIR}/build/teleport" ] || { echo "[prod-start] ERROR: no teleport binary — staying alive"; while true; do sleep 60; done; }
 
 echo "[prod-start] Starting teleport (web :3080, TLS at the ingress)..."
-"${REPO_DIR}/build/teleport" start -c "$TELEPORT_CONFIG" --insecure-no-tls &
+"${REPO_DIR}/build/teleport" start -c "$TELEPORT_CONFIG_FILE" --insecure-no-tls &
 _TELEPORT_PID=$!
 echo "[prod-start] teleport PID: $_TELEPORT_PID"
 
