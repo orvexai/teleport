@@ -125,6 +125,17 @@ spec:
         STOREOF
         export CONTAINERS_STORAGE_CONF=/tmp/storage.conf
 
+        # Clear any stale lock files left by a previously killed pod. Lock files
+        # are PID-scoped; a new pod's PID can never match an old lock so they only
+        # ever block or confuse buildah — safe to remove unconditionally at startup.
+        find /var/lib/containers/storage -name '*.lock' -delete 2>/dev/null || true
+        mkdir -p /tmp/containers-run && find /tmp/containers-run -name '*.lock' -delete 2>/dev/null || true
+
+        # Prune dangling/intermediate layers from previous builds. Keeps the node
+        # disk from growing unboundedly. Runs before the build so a full disk
+        # doesn't cause a mid-build failure.
+        buildah prune --all 2>/dev/null || true
+
         # Setup registry auth if provided
         if [ -d "$(workspaces.dockerconfig.path)" ]; then
           export REGISTRY_AUTH_FILE=$(workspaces.dockerconfig.path)/.dockerconfigjson
