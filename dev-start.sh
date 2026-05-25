@@ -43,8 +43,11 @@ _load_dotenv
 _set_git_sha
 export TELEPORT_CONFIG="${REPO_DIR}/deploy/dev/teleport.yaml"
 
-echo "[dev-start] Building teleport + tctl (incremental, skip web rebuild)..."
-make build/teleport build/tctl OS=linux ARCH=amd64 WEBASSETS_SKIP_BUILD=1 2>&1 \
+echo "[dev-start] Building teleport + tctl (incremental; skip web + Rust RDP)..."
+# RDPCLIENT_SKIP_BUILD=1: skip the Rust desktop-access (rdpclient) build — not needed
+# for OIDC dev/testing, and it avoids the Rust toolchain entirely (faster, no override
+# mismatch). build/teleport + build/tctl don't pull in fdpass, so this build is Rust-free.
+make build/teleport build/tctl OS=linux ARCH=amd64 WEBASSETS_SKIP_BUILD=1 RDPCLIENT_SKIP_BUILD=1 2>&1 \
     || echo "[dev-start] WARN: build exited non-zero (continuing with existing binaries)"
 [ -x "${REPO_DIR}/build/teleport" ] || { echo "[dev-start] ERROR: no teleport binary — staying alive"; while true; do sleep 60; done; }
 

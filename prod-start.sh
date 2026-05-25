@@ -41,8 +41,11 @@ _load_dotenv
 _set_git_sha
 export TELEPORT_CONFIG="${REPO_DIR}/deploy/dev/teleport.yaml"
 
-echo "[prod-start] Full build (make full — web UI + bpf + rdp)... this is slow."
-make full OS=linux ARCH=amd64 2>&1 || echo "[prod-start] WARN: make full exited non-zero (continuing)"
+echo "[prod-start] Server build (teleport + tctl + fresh web UI; no Rust/client tools)..."
+# Server-side only (matches the CI image): teleport + tctl + embedded web UI, skipping
+# tsh/tbot and the Rust RDP client. Unlike dev-start, the web UI is rebuilt (no
+# WEBASSETS_SKIP_BUILD) for a clean prod-equivalent build.
+make build/teleport build/tctl OS=linux ARCH=amd64 RDPCLIENT_SKIP_BUILD=1 2>&1 || echo "[prod-start] WARN: build exited non-zero (continuing)"
 [ -x "${REPO_DIR}/build/teleport" ] || { echo "[prod-start] ERROR: no teleport binary — staying alive"; while true; do sleep 60; done; }
 
 echo "[prod-start] Starting teleport (web :3080, TLS at the ingress)..."

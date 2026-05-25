@@ -42,9 +42,11 @@ ENV GOPATH=/tmp/ci/go \
 WORKDIR /go/src/github.com/gravitational/teleport
 COPY . .
 
-# `make full` == ensure-webassets (yarn build of the web UI) + `make all`
-# (teleport, tctl, tsh, tbot, ... into ./build with webassets_embed + bpf + rdp).
-RUN make full OS=linux ARCH=${TELEPORT_ARCH}
+# Server-side only: the `teleport` server binary + `tctl` (admin), with the embedded
+# web UI + BPF. Skips the client tools (tsh/tbot) and the Rust desktop-access build
+# (rdpclient) — not needed for the IDP server (OIDC/SSH/kube), much faster, Rust-free.
+# build/teleport depends on ensure-webassets, so the web UI is still built + embedded.
+RUN make build/teleport build/tctl OS=linux ARCH=${TELEPORT_ARCH} RDPCLIENT_SKIP_BUILD=1
 
 # ---------------------------------------------------------------------------
 
@@ -52,10 +54,10 @@ FROM debian:12-slim AS teleport
 
 # Runtime deps: PAM/audit/cap-ng are dynamically linked by the teleport binary;
 # ca-certificates is required for OIDC (Keycloak) TLS; dumb-init reaps zombies.
-# libfido2-1 is required by tctl/tsh (this build links libfido2 dynamically, unlike
-# the upstream release which links it statically); apt pulls its deps (libcbor etc.).
-# The buildbox is Debian-bookworm-based, so this matches the .so the binaries linked
-# against. Without it, tctl/tsh fail with "libfido2.so.1: cannot open shared object".
+# libfido2-1 is required by tctl (this build links libfido2 dynamically, unlike the
+# upstream release which links it statically); apt pulls its deps (libcbor etc.).
+# The buildbox is Debian-bookworm-based, so this matches the .so the binary linked
+# against. Without it, tctl fails with "libfido2.so.1: cannot open shared object".
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -66,11 +68,11 @@ RUN apt-get update \
         libfido2-1 \
     && rm -rf /var/lib/apt/lists/*
 
+# Server-side binaries only — teleport (server) + tctl (admin, used by the connector
+# job). tsh/tbot are client tools, not part of the server image.
 ARG TELEPORT_SRC=/go/src/github.com/gravitational/teleport/build
 COPY --from=builder ${TELEPORT_SRC}/teleport /usr/local/bin/teleport
 COPY --from=builder ${TELEPORT_SRC}/tctl     /usr/local/bin/tctl
-COPY --from=builder ${TELEPORT_SRC}/tsh      /usr/local/bin/tsh
-COPY --from=builder ${TELEPORT_SRC}/tbot     /usr/local/bin/tbot
 
 RUN mkdir -p /etc/teleport /var/lib/teleport
 
