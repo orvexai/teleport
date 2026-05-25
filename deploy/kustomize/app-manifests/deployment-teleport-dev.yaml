@@ -1,0 +1,120 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: teleport-dev
+  namespace: teleport-dev
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: teleport-dev
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: teleport-dev
+    spec:
+      serviceAccountName: teleport-dev
+      imagePullSecrets:
+        - name: harbor-registry-credentials
+      # Run as non-root dev user (uid/gid 1000). No fsGroup: it triggers a slow
+      # recursive kubelet chown on first mount. The initContainer chowns once and skips.
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+      initContainers:
+        # One-time migration: chown PVC contents to the dev user. Runs as root;
+        # idempotent — skips when the mount root is already 1000-owned.
+        - name: fix-perms
+          image: repos.eu-central-1.myidp.cloud/teleport/teleport-dev:dev
+          imagePullPolicy: Always
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+          command:
+            - sh
+            - -c
+            - 'for d in /home/dev /workspace; do [ "$(stat -c %u "$d")" = 1000 ] || { echo "chown -R 1000:1000 $d"; chown -R 1000:1000 "$d"; }; done'
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: home
+              mountPath: /home/dev
+      containers:
+        - name: dev
+          image: repos.eu-central-1.myidp.cloud/teleport/teleport-dev:dev
+          imagePullPolicy: Always
+          stdin: true
+          tty: true
+          command: ["/usr/local/bin/teleport-dev-entrypoint.sh"]
+          args: ["/bin/sh", "-c", "/workspace/teleport/dev-start.sh || true; exec sleep infinity"]
+          ports:
+            - name: web
+              containerPort: 3080
+          env:
+            - name: HOME
+              value: /home/dev
+            - name: WORKSPACE_DIR
+              value: /workspace
+            - name: GIT_BRANCH
+              value: orvex
+            - name: CLAUDE_REMOTE_ACCESSIBLE
+              value: "true"
+            - name: KEYCLOAK_HOST
+              value: auth.eu-central-1.myidp.cloud
+            - name: TELEPORT_DEV_HOST
+              value: tp-dev.eu-central-1.myidp.cloud
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: teleport-oidc-secret
+                  key: client_secret
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: teleport-db-app
+                  key: password
+                  optional: true
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: teleport-dev-sessions-bucket
+                  key: AWS_ACCESS_KEY_ID
+                  optional: true
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: teleport-dev-sessions-bucket
+                  key: AWS_SECRET_ACCESS_KEY
+                  optional: true
+            - name: GOCACHE
+              value: /workspace/.cache/go-build
+            - name: GOMODCACHE
+              value: /workspace/.cache/go-mod
+            - name: CARGO_HOME
+              value: /workspace/.cache/cargo
+            - name: GOFLAGS
+              value: "-p=8"
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: home
+              mountPath: /home/dev
+          resources:
+            requests:
+              cpu: "2"
+              memory: 4Gi
+            limits:
+              cpu: "11"
+              memory: 24Gi
+      volumes:
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: teleport-dev-workspace
+        - name: home
+          persistentVolumeClaim:
+            claimName: teleport-dev-home

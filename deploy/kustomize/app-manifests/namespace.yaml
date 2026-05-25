@@ -1,0 +1,8 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: teleport-dev
+  labels:
+    app.kubernetes.io/part-of: teleport-fork
+    myidp.io/env-type: development

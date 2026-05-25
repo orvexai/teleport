@@ -1,0 +1,42 @@
+---
+# Cluster Configuration — build-time only (not deployed)
+# Referenced by Kustomize replacements at build time.
+#
+# The CMP plugin in argocd injects environment-specific values from the
+# ApplicationSet into this ConfigMap before kustomize build runs.
+# See applications/eu-central-1/app-environments-appset.yaml in my-idp-apps.
+#
+# NOTE: appNamespace is intentionally kept as teleport-dev (not the
+# convention-derived teleport-orvex) to match existing DNS/PVC state.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-config
+  namespace: cluster-config
+  annotations:
+    config.kubernetes.io/local-config: "true"
+    argocd.argoproj.io/sync-options: Prune=false
+  labels:
+    config.my-idp/build-time-only: "true"
+data:
+  appName: teleport
+  appNamespace: teleport-dev
+  environment: dev
+
+  baseDomain: myidp.cloud
+  clusterDomain: eu-central-1.myidp.cloud
+  loadBalancerIP: "37.27.73.18"
+
+  teleportHost: tp-dev.eu-central-1.myidp.cloud
+  keycloakHost: auth.eu-central-1.myidp.cloud
+
+  harborHost: repos.eu-central-1.myidp.cloud
+  imageRepository: repos.eu-central-1.myidp.cloud/teleport
+
+  gitBranch: orvex
+  branchSlug: orvex
+
+  # ReadWriteMany storage for workspace/home PVCs (Ceph CephFS)
+  storageClassRWX: rook-cephfs
+  # ReadWriteOnce block storage for Postgres (Ceph RBD XFS)
+  storageClassBlock: rook-ceph-block-xfs

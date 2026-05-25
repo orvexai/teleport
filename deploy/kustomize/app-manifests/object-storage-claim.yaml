@@ -1,0 +1,13 @@
+---
+# S3 bucket (Ceph RGW) for session recordings → secret teleport-dev-sessions-bucket.
+apiVersion: platform.myidp.io/v1alpha1
+kind: ObjectStorageClaim
+metadata:
+  name: teleport-dev-sessions
+  namespace: teleport-dev
+  annotations:
+    argocd.argoproj.io/sync-options: ServerSideApply=false
+spec:
+  bucketName: teleport-dev-sessions
+  maxSize: "50Gi"
+  maxObjects: "1000000"

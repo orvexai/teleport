@@ -1,0 +1,38 @@
+---
+# Postgres backend for the dev teleport (pgbk + pgevents). CNPG creates teleport-db-app
+# (password → PGPASSWORD). Single instance (dev-grade).
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: teleport-db
+  namespace: teleport-dev
+spec:
+  instances: 1
+  # CNPG + wal2json (pgbk change feed needs it) — built by deploy/dev/cnpg-wal2json.
+  imageName: repos.eu-central-1.myidp.cloud/teleport/postgresql-wal2json:18.1-trixie  # CHECKED: 2026-05-25
+  imagePullSecrets:
+    - name: harbor-registry-credentials
+  bootstrap:
+    initdb:
+      database: teleport
+      owner: teleport
+  managed:
+    roles:
+      - name: teleport
+        ensure: present
+        login: true
+        replication: true
+  storage:
+    storageClass: rook-ceph-block-xfs
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  postgresql:
+    parameters:
+      wal_level: "logical"
+      max_connections: "200"

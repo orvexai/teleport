@@ -1,0 +1,129 @@
+---
+# Teleport dev environment — Kustomization
+#
+# Single-environment deployment driven by the CMP plugin env vars
+# (NAMESPACE, BRANCH, etc.) passed by the my-idp-apps ApplicationSet.
+#
+# Deployed for the `orvex` branch only (see my-idp-apps/apps/teleport/app.yaml).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+labels:
+  - pairs:
+      app.kubernetes.io/name: teleport
+      app.kubernetes.io/part-of: teleport-fork
+      app.kubernetes.io/managed-by: argocd
+    includeSelectors: false
+
+resources:
+  # Build-time only (not deployed)
+  - cluster-config.yaml
+
+  # Namespace
+  - app-manifests/namespace.yaml
+
+  # ServiceAccount + RBAC (teleport-dev ns + cross-ns teleport ns for hot-swap)
+  - app-manifests/serviceaccount-teleport.yaml
+
+  # Registry credentials
+  - app-manifests/external-secret-harbor.yaml
+
+  # Persistent storage
+  - app-manifests/pvc-workspace.yaml
+  - app-manifests/pvc-home.yaml
+
+  # OIDC client secret
+  - app-manifests/external-secret-oidc.yaml
+
+  # Datastore
+  - app-manifests/postgres.yaml
+
+  # S3 session recordings bucket
+  - app-manifests/object-storage-claim.yaml
+
+  # Teleport dev pod
+  - app-manifests/deployment-teleport-dev.yaml
+  - app-manifests/service-teleport-dev.yaml
+
+  # Ingress
+  - app-manifests/httproute-teleport-dev.yaml
+  - app-manifests/httproute-teleport-dev-redirect.yaml
+
+# ─────────────────────────────────────────────────────────────────────────
+# Replacements — inject cluster-config values into the resources
+# ─────────────────────────────────────────────────────────────────────────
+replacements:
+  # Namespace on every resource that lives in teleport-dev
+  - source:
+      kind: ConfigMap
+      name: cluster-config
+      fieldPath: data.appNamespace
+    targets:
+      - select:
+          namespace: teleport-dev
+        fieldPaths:
+          - metadata.namespace
+      - select:
+          kind: Namespace
+          name: teleport-dev
+        fieldPaths:
+          - metadata.name
+
+  # Teleport hostname → HTTPRoute, external-dns annotation, deployment env
+  - source:
+      kind: ConfigMap
+      name: cluster-config
+      fieldPath: data.teleportHost
+    targets:
+      - select:
+          kind: HTTPRoute
+          name: teleport-dev
+        fieldPaths:
+          - spec.hostnames.0
+          - metadata.annotations.[external-dns.alpha.kubernetes.io/hostname]
+      - select:
+          kind: HTTPRoute
+          name: teleport-dev-redirect
+        fieldPaths:
+          - spec.hostnames.0
+      - select:
+          kind: Deployment
+          name: teleport-dev
+        fieldPaths:
+          - spec.template.spec.containers.[name=dev].env.[name=TELEPORT_DEV_HOST].value
+
+  # Keycloak hostname → deployment env
+  - source:
+      kind: ConfigMap
+      name: cluster-config
+      fieldPath: data.keycloakHost
+    targets:
+      - select:
+          kind: Deployment
+          name: teleport-dev
+        fieldPaths:
+          - spec.template.spec.containers.[name=dev].env.[name=KEYCLOAK_HOST].value
+
+  # External-DNS target (load balancer IP) — HTTPS route only
+  - source:
+      kind: ConfigMap
+      name: cluster-config
+      fieldPath: data.loadBalancerIP
+    targets:
+      - select:
+          kind: HTTPRoute
+          name: teleport-dev
+        fieldPaths:
+          - metadata.annotations.[external-dns.alpha.kubernetes.io/target]
+
+  # Git branch → deployment env
+  - source:
+      kind: ConfigMap
+      name: cluster-config
+      fieldPath: data.gitBranch
+    targets:
+      - select:
+          kind: Deployment
+          name: teleport-dev
+        fieldPaths:
+          - spec.template.spec.containers.[name=dev].env.[name=GIT_BRANCH].value
