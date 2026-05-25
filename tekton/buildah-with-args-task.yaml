@@ -103,25 +103,21 @@ spec:
           memory: 24Gi
       env:
         - name: STORAGE_DRIVER
-          value: overlay
+          value: vfs
         - name: BUILDAH_FORMAT
           value: oci
       script: |
         #!/bin/bash
         set -eu
 
-        # Configure rootless storage. Use fuse-overlayfs (bundled in buildah image)
-        # for overlay-based storage — avoids full-copy VFS extraction which takes
-        # 10-15 min for the large teleport-buildbox image. Falls back gracefully
-        # to native overlay if kernel user-namespace overlay is available.
+        # Configure rootless storage to use the emptyDir-backed volume.
         mkdir -p /var/lib/containers/storage
         cat > /tmp/storage.conf <<STOREOF
         [storage]
-        driver = "overlay"
+        driver = "vfs"
         rootless_storage_path = "/var/lib/containers/storage"
-        [storage.options.overlay]
+        [storage.options.vfs]
         ignore_chown_errors = "true"
-        mount_program = "/usr/bin/fuse-overlayfs"
         STOREOF
         export CONTAINERS_STORAGE_CONF=/tmp/storage.conf
 
