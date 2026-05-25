@@ -42,6 +42,13 @@ proxy_service:
   # External address (via the Traefik HTTPRoute) — drives OIDC redirect_url + cookies.
   public_addr: tp-dev.eu-central-1.myidp.cloud:443
   web_listen_addr: 0.0.0.0:3080
+  # In separate mode under --insecure-no-tls these listeners are NOT folded into the
+  # web port (multiplex does that, but it needs TLS). The proxy always starts its SSH
+  # and reverse-tunnel servers, so without explicit addrs listeners.ssh/reverseTunnel
+  # are nil → "listener cannot be nil" (reverse tunnel) / nil deref (sshGRPC). Only
+  # :3080 is exposed via the HTTPRoute; :3023/:3024 just satisfy the proxy internally.
+  listen_addr: 0.0.0.0:3023
+  tunnel_listen_addr: 0.0.0.0:3024
 
 ssh_service:
   enabled: false
