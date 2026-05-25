@@ -1,0 +1,77 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tekton-pruner
+  namespace: tekton-pipelines
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tekton-pruner
+  namespace: tekton-pipelines
+rules:
+  - apiGroups: ["tekton.dev"]
+    resources: ["pipelineruns", "taskruns"]
+    verbs: ["get", "list", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tekton-pruner
+  namespace: tekton-pipelines
+subjects:
+  - kind: ServiceAccount
+    name: tekton-pruner
+    namespace: tekton-pipelines
+roleRef:
+  kind: Role
+  name: tekton-pruner
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: tekton-pruner
+  namespace: tekton-pipelines
+spec:
+  schedule: "0 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: tekton-pruner
+          restartPolicy: OnFailure
+          containers:
+            - name: pruner
+              image: bitnami/kubectl:latest
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  KEEP=10
+                  NS=tekton-pipelines
+
+                  echo "=== PipelineRun pruner: keeping newest $KEEP ==="
+
+                  ALL=$(kubectl get pipelinerun -n $NS \
+                    --sort-by=.metadata.creationTimestamp \
+                    -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
+
+                  TOTAL=$(echo "$ALL" | grep -c . || true)
+                  echo "Found $TOTAL PipelineRuns"
+
+                  if [ "$TOTAL" -le "$KEEP" ]; then
+                    echo "Nothing to prune."
+                    exit 0
+                  fi
+
+                  TO_DELETE=$(echo "$ALL" | head -n "-$KEEP")
+                  COUNT=$(echo "$TO_DELETE" | grep -c . || true)
+                  echo "Deleting $COUNT old PipelineRuns..."
+                  echo "$TO_DELETE" | xargs kubectl delete pipelinerun -n $NS
+                  echo "Done."

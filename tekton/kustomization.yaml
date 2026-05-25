@@ -17,3 +17,4 @@ resources:
   - buildah-with-args-task.yaml
   - teleport-build-pipeline.yaml
   - trigger.yaml
+  - pruner.yaml
