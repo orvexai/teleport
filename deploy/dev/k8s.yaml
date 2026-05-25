@@ -135,14 +135,13 @@ spec:
       serviceAccountName: teleport-dev
       imagePullSecrets:
         - name: harbor-registry-credentials
-      # Run as the non-root dev user (uid/gid 1000, baked into the image). fsGroup makes
-      # newly-written volume files group-1000; OnRootMismatch avoids re-chowning the
-      # whole 40Gi workspace on every mount.
+      # Run as the non-root dev user (uid/gid 1000, baked into the image). No fsGroup:
+      # it triggers a slow recursive kubelet chown of the whole workspace (the Go cache
+      # is 100k+ files) on first mount and only sets the group. The initContainer below
+      # chowns owner+group to 1000 once (git needs correct ownership too) and then skips.
       securityContext:
         runAsUser: 1000
         runAsGroup: 1000
-        fsGroup: 1000
-        fsGroupChangePolicy: OnRootMismatch
       initContainers:
         # One-time migration: the PVCs were first populated while the pod ran as root,
         # so chown their contents to the dev user. Runs as root; idempotent — skips when

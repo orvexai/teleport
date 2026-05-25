@@ -110,14 +110,16 @@ spec:
         #!/bin/bash
         set -eu
 
-        # privileged: true grants CAP_SYS_ADMIN → native kernel overlayfs works
-        # without fuse-overlayfs. Overlay stores each layer once and uses CoW
-        # mounts, cutting the FROM image extraction from ~15 min (VFS) to seconds.
+        # privileged: true + native kernel overlay + node-local hostPath store:
+        # the overlay layers survive pod termination on the same node, so the
+        # buildbox image is only downloaded once per node. Subsequent builds skip
+        # the pull entirely — FROM goes from ~2-3 min to seconds.
         mkdir -p /var/lib/containers/storage
         cat > /tmp/storage.conf <<STOREOF
         [storage]
         driver = "overlay"
-        rootless_storage_path = "/var/lib/containers/storage"
+        graphRoot = "/var/lib/containers/storage"
+        runRoot  = "/run/containers/storage"
         [storage.options.overlay]
         ignore_chown_errors = "true"
         STOREOF
@@ -184,4 +186,9 @@ spec:
 
   volumes:
     - name: varlibcontainers
-      emptyDir: {}
+      hostPath:
+        # Node-local overlay store — persists the buildbox image layers across
+        # builds on the same node. First pull populates it; subsequent builds
+        # reuse the cached layers and skip the pull entirely.
+        path: /var/lib/teleport-buildah-store
+        type: DirectoryOrCreate
