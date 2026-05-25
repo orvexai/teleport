@@ -119,7 +119,7 @@ spec:
         [storage]
         driver = "overlay"
         graphRoot = "/var/lib/containers/storage"
-        runRoot  = "/run/containers/storage"
+        runRoot   = "/tmp/containers-run"
         [storage.options.overlay]
         ignore_chown_errors = "true"
         STOREOF
