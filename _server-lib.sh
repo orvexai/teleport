@@ -107,7 +107,13 @@ spec:
       roles: ["access"]
     - claim: groups
       value: "Orvex AI Developers"
-      roles: ["access", "orvex-ai-developers"]
+      roles: ["access"]
+    # orvex-ai-* groups: each group maps to the namespace of the same name.
+    # Adding a new group in Keycloak (e.g. orvex-ai-myapp) automatically grants
+    # namespace access — no connector or role changes needed.
+    - claim: groups
+      value: "orvex-ai-*"
+      roles: ["access", "orvex-ai-developer"]
     # Catch-all: any Keycloak group member can log in with base access.
     # New groups added in Keycloak automatically get access without connector changes.
     - claim: groups
@@ -137,13 +143,13 @@ spec:
       - resources: ["*"]
         verbs: ["*"]
 LREOF
-    echo "[$tag] Applying orvex-ai-developers role (kube admin on orvex-ai-* namespaces)..."
+    echo "[$tag] Applying orvex-ai-developer role (dynamic kube access: groups == namespaces)..."
     "${REPO_DIR}/build/tctl" --config "${TELEPORT_CONFIG_FILE:-${REPO_DIR}/deploy/dev/teleport.yaml}" \
-        create -f - --force <<'OADEOF' || echo "[$tag] WARN: orvex-ai-developers role apply failed"
+        create -f - --force <<'OADEOF' || echo "[$tag] WARN: orvex-ai-developer role apply failed"
 kind: role
 version: v7
 metadata:
-  name: orvex-ai-developers
+  name: orvex-ai-developer
 spec:
   allow:
     logins:
@@ -152,19 +158,15 @@ spec:
       - "system:masters"
     kubernetes_labels:
       "*": "*"
+    # {{external.groups}} expands per-value: a user in orvex-ai-foo and orvex-ai-bar
+    # automatically gets access to both namespaces. New groups require no role changes.
     kubernetes_resources:
-      - kind: namespace
-        name: "orvex-ai-*"
-        verbs: ["*"]
       - kind: "*"
-        namespace: "orvex-ai-*"
+        namespace: "{{external.groups}}"
         name: "*"
         verbs: ["*"]
   deny:
     kubernetes_resources:
-      - kind: namespace
-        name: "orvex-ai"
-        verbs: ["*"]
       - kind: "*"
         namespace: "orvex-ai"
         name: "*"
