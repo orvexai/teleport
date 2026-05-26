@@ -79,7 +79,7 @@ class TeleportContext implements types.Context {
   // Mainly used to hide features and/or show CTAs when the user cluster doesn't support it.
   lockedFeatures: types.LockedFeatures = {
     authConnectors: !(
-      cfg.entitlements.OIDC.enabled && cfg.entitlements.SAML.enabled
+      cfg.entitlements.OIDC.enabled || cfg.entitlements.SAML.enabled
     ),
     accessRequests: !cfg.entitlements.AccessRequests.enabled,
     trustedDevices: !cfg.entitlements.DeviceTrust.enabled,

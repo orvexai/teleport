@@ -1094,6 +1094,15 @@ func (h *Handler) bindDefaultEndpoints() {
 	h.PUT("/webapi/github/:name", h.WithAuth(h.updateGithubConnectorHandle))
 	h.DELETE("/webapi/github/:name", h.WithAuth(h.deleteGithubConnector))
 
+	// OIDC connector CRUD routes (mirrors the GitHub connector routes above).
+	// The extra "connector" in the path is to avoid a wildcard conflict with the OIDC handlers used
+	// during the login flow ("oidc/login/web" and "oidc/callback").
+	h.GET("/webapi/oidc/connectors", h.WithAuth(h.getOIDCConnectorsHandle))
+	h.POST("/webapi/oidc/connectors", h.WithAuth(h.createOIDCConnectorHandle))
+	h.GET("/webapi/oidc/connector/:name", h.WithAuth(h.getOIDCConnectorHandle))
+	h.PUT("/webapi/oidc/connector/:name", h.WithAuth(h.updateOIDCConnectorHandle))
+	h.DELETE("/webapi/oidc/connector/:name", h.WithAuth(h.deleteOIDCConnector))
+
 	// Sets the default connector in the auth preference.
 	h.PUT("/webapi/authconnector/default", h.WithAuth(h.setDefaultConnectorHandle))
 	// Returns auth connectors that match a given username.

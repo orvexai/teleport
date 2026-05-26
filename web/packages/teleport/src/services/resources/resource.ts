@@ -260,6 +260,47 @@ class ResourceService {
   deleteGithubConnector(name: string) {
     return api.delete(cfg.getGithubConnectorsUrl(name));
   }
+
+  async fetchOidcConnectors(): Promise<{
+    defaultConnector: DefaultAuthConnector;
+    connectors: Resource<'oidc'>[];
+  }> {
+    // MFA reuse needs to be allowed in case we need to fallback to another default connector
+    const challengeResponse =
+      await await auth.getMfaChallengeResponseForAdminAction(true);
+
+    return api
+      .get(cfg.getOidcConnectorsUrl(), undefined, challengeResponse)
+      .then(res => ({
+        defaultConnector: {
+          name: res.defaultConnectorName,
+          type: res.defaultConnectorType,
+        },
+        connectors: makeResourceList<'oidc'>(res.connectors),
+      }));
+  }
+
+  createOidcConnector(content: string) {
+    return api
+      .post(cfg.getOidcConnectorsUrl(), { content })
+      .then(res => makeResource<'oidc'>(res));
+  }
+
+  fetchOidcConnector(name: string) {
+    return api
+      .get(cfg.getOidcConnectorUrl(name))
+      .then(res => makeResource<'oidc'>(res));
+  }
+
+  updateOidcConnector(name: string, content: string) {
+    return api
+      .put(cfg.getOidcConnectorUrl(name), { content })
+      .then(res => makeResource<'oidc'>(res));
+  }
+
+  deleteOidcConnector(name: string) {
+    return api.delete(cfg.getOidcConnectorUrl(name));
+  }
 }
 
 export default ResourceService;

@@ -1,0 +1,17 @@
+kind: oidc
+version: v3
+metadata:
+  name: ""
+spec:
+  display: ""
+  issuer_url: ""
+  client_id: ""
+  client_secret: ""
+  redirect_url: ""
+  username_claim: preferred_username
+  scope: ["openid", "email", "profile", "groups"]
+  pkce_mode: "enabled"
+  claims_to_roles:
+    - claim: groups
+      value: ""
+      roles: []

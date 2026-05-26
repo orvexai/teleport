@@ -18,3 +18,4 @@
 
 export { AuthConnectorEditorContent } from './AuthConnectorEditorContent';
 export { GitHubConnectorEditor } from './GitHubConnectorEditor';
+export { OIDCConnectorEditor } from './OIDCConnectorEditor';

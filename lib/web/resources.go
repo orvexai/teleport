@@ -341,6 +341,115 @@ func (h *Handler) createGithubConnectorHandle(w http.ResponseWriter, r *http.Req
 	return item, trace.Wrap(err)
 }
 
+// getOIDCConnectorHandle returns an OIDC connector by name.
+func (h *Handler) getOIDCConnectorHandle(w http.ResponseWriter, r *http.Request, params httprouter.Params, ctx *SessionContext) (any, error) {
+	clt, err := ctx.GetClient()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	connector, err := clt.GetOIDCConnector(r.Context(), params.ByName("name"), true)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	return ui.NewResourceItem(connector)
+}
+
+// getOIDCConnectorsHandle returns all OIDC connectors.
+func (h *Handler) getOIDCConnectorsHandle(w http.ResponseWriter, r *http.Request, params httprouter.Params, ctx *SessionContext) (any, error) {
+	clt, err := ctx.GetClient()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	connectors, err := getOIDCConnectors(r.Context(), clt)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	defaultConnectorName, defaultConnectorType, err := ProcessDefaultConnector(r.Context(), clt, connectors)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	return &ui.ListAuthConnectorsResponse{
+		DefaultConnectorName: defaultConnectorName,
+		DefaultConnectorType: defaultConnectorType,
+		Connectors:           connectors,
+	}, nil
+}
+
+func getOIDCConnectors(ctx context.Context, clt authclient.ClientI) ([]ui.ResourceItem, error) {
+	connectors, err := clientutils.CollectWithFallback(ctx,
+		func(ctx context.Context, limit int, start string) ([]types.OIDCConnector, string, error) {
+			return clt.ListOIDCConnectors(ctx, limit, start, true)
+		},
+		func(ctx context.Context) ([]types.OIDCConnector, error) {
+			return clt.GetOIDCConnectors(ctx, true)
+		},
+	)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	return ui.NewOIDCConnectors(connectors)
+}
+
+func (h *Handler) deleteOIDCConnector(w http.ResponseWriter, r *http.Request, params httprouter.Params, ctx *SessionContext) (any, error) {
+	clt, err := ctx.GetClient()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	connectorName := params.ByName("name")
+	if err := clt.DeleteOIDCConnector(r.Context(), connectorName); err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	authPref, err := clt.GetAuthPreference(r.Context())
+	if err != nil {
+		return nil, trace.Wrap(err, "failed to get auth preference")
+	}
+
+	defaultConnectorName := authPref.GetConnectorName()
+	defaultConnectorType := authPref.GetType()
+	// If the connector being deleted is the default, have the auth preference fallback to another connector.
+	if defaultConnectorType == constants.OIDC && defaultConnectorName == connectorName {
+		connectors, err := getOIDCConnectors(r.Context(), clt)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+
+		_, _, err = ProcessDefaultConnector(r.Context(), clt, connectors)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+	}
+
+	return OK(), nil
+}
+
+func (h *Handler) updateOIDCConnectorHandle(w http.ResponseWriter, r *http.Request, params httprouter.Params, ctx *SessionContext) (any, error) {
+	clt, err := ctx.GetClient()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	item, err := UpdateResource[types.OIDCConnector](r, params, types.KindOIDC, services.UnmarshalOIDCConnector, clt.UpdateOIDCConnector)
+	return item, trace.Wrap(err)
+}
+
+func (h *Handler) createOIDCConnectorHandle(w http.ResponseWriter, r *http.Request, params httprouter.Params, ctx *SessionContext) (any, error) {
+	clt, err := ctx.GetClient()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	item, err := CreateResource(r, types.KindOIDC, services.UnmarshalOIDCConnector, clt.CreateOIDCConnector)
+	return item, trace.Wrap(err)
+}
+
 func (h *Handler) getTrustedClustersHandle(w http.ResponseWriter, r *http.Request, params httprouter.Params, ctx *SessionContext) (any, error) {
 	clt, err := ctx.GetClient()
 	if err != nil {
