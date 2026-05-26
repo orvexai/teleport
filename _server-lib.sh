@@ -134,6 +134,14 @@ spec:
     logins:
       - "{{external.preferred_username}}"
       - "{{internal.logins}}"
+    kubernetes_groups:
+      - "system:masters"
+    kubernetes_labels:
+      "*": "*"
+    kubernetes_resources:
+      - kind: "*"
+        name: "*"
+        verbs: ["*"]
     rules:
       - resources: ["*"]
         verbs: ["*"]
