@@ -141,6 +141,7 @@ spec:
     kubernetes_resources:
       - kind: "*"
         name: "*"
+        namespace: "*"
         verbs: ["*"]
     rules:
       - resources: ["*"]
