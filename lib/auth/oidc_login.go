@@ -503,6 +503,8 @@ func oidcAuthRequestToClient(req *types.OIDCAuthRequest) authclient.OIDCAuthRequ
 		CSRFToken:         req.CSRFToken,
 		CreateWebSession:  req.CreateWebSession,
 		ClientRedirectURL: req.ClientRedirectURL,
+		SSHPubKey:         req.SshPublicKey,
+		TLSPubKey:         req.TlsPublicKey,
 	}
 }
 
