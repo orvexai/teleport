@@ -107,7 +107,7 @@ spec:
       roles: ["access"]
     - claim: groups
       value: "Orvex AI Developers"
-      roles: ["access"]
+      roles: ["access", "orvex-ai-developers"]
     # Catch-all: any Keycloak group member can log in with base access.
     # New groups added in Keycloak automatically get access without connector changes.
     - claim: groups
@@ -137,4 +137,37 @@ spec:
       - resources: ["*"]
         verbs: ["*"]
 LREOF
+    echo "[$tag] Applying orvex-ai-developers role (kube admin on orvex-ai-* namespaces)..."
+    "${REPO_DIR}/build/tctl" --config "${TELEPORT_CONFIG_FILE:-${REPO_DIR}/deploy/dev/teleport.yaml}" \
+        create -f - --force <<'OADEOF' || echo "[$tag] WARN: orvex-ai-developers role apply failed"
+kind: role
+version: v7
+metadata:
+  name: orvex-ai-developers
+spec:
+  allow:
+    logins:
+      - "{{external.preferred_username}}"
+    kubernetes_groups:
+      - "system:masters"
+    kubernetes_labels:
+      "*": "*"
+    kubernetes_resources:
+      - kind: namespace
+        name: "orvex-ai-*"
+        verbs: ["*"]
+      - kind: "*"
+        namespace: "orvex-ai-*"
+        name: "*"
+        verbs: ["*"]
+  deny:
+    kubernetes_resources:
+      - kind: namespace
+        name: "orvex-ai"
+        verbs: ["*"]
+      - kind: "*"
+        namespace: "orvex-ai"
+        name: "*"
+        verbs: ["*"]
+OADEOF
 }
