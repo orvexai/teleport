@@ -72,14 +72,22 @@ _wait_web_ready() {
     [ "$w" -lt "$max" ] && echo "[$tag] web ready after ${w}s" || echo "[$tag] WARN: web not ready after ${max}s"
 }
 
-# Create/refresh the Keycloak OIDC connector via the freshly-built local tctl.
-# Idempotent (--force). Needs OIDC_CLIENT_SECRET in the env (from the ExternalSecret).
+# Bootstrap the Keycloak OIDC connector on first run only (no --force).
+# After initial creation, group→role mappings are managed via the Teleport UI
+# so that UI edits survive restarts. To reset to defaults, delete the connector
+# manually: tctl rm oidc/keycloak
 _apply_oidc_connector() {
     local tag=${_SERVER_TAG:-server}
     [ -z "${OIDC_CLIENT_SECRET:-}" ] && { echo "[$tag] OIDC_CLIENT_SECRET unset — skipping connector"; return 0; }
-    echo "[$tag] Applying Keycloak OIDC connector (local tctl)..."
+    if "${REPO_DIR}/build/tctl" --config "${TELEPORT_CONFIG_FILE:-${REPO_DIR}/deploy/dev/teleport.yaml}" \
+            get oidc/keycloak >/dev/null 2>&1; then
+        echo "[$tag] Keycloak OIDC connector already exists — skipping (edit via UI or delete to reset)"
+        _apply_login_rule "$tag"
+        return 0
+    fi
+    echo "[$tag] Creating Keycloak OIDC connector (first run)..."
     "${REPO_DIR}/build/tctl" --config "${TELEPORT_CONFIG_FILE:-${REPO_DIR}/deploy/dev/teleport.yaml}" \
-        create -f - --force <<EOF || echo "[$tag] WARN: connector apply failed"
+        create -f - <<EOF || echo "[$tag] WARN: connector apply failed"
 kind: oidc
 version: v3
 metadata:
@@ -90,12 +98,10 @@ spec:
   client_id: teleport
   client_secret: "${OIDC_CLIENT_SECRET}"
   redirect_url: "https://${TELEPORT_DEV_HOST:-tp-dev.eu-central-1.myidp.cloud}/v1/webapi/oidc/callback"
-  # preferred_username gives the human-readable Keycloak username instead of the UUID sub claim.
   username_claim: preferred_username
   scope: ["openid", "email", "profile", "groups"]
   pkce_mode: "enabled"
   claims_to_roles:
-    # Elevated access for specific groups.
     - claim: groups
       value: Administrators
       roles: ["editor", "access", "auditor"]
@@ -105,17 +111,6 @@ spec:
     - claim: groups
       value: Developers
       roles: ["access"]
-    - claim: groups
-      value: "Orvex AI Developers"
-      roles: ["access"]
-    # orvex-ai-* groups: each group maps to the namespace of the same name.
-    # Adding a new group in Keycloak (e.g. orvex-ai-myapp) automatically grants
-    # namespace access — no connector or role changes needed.
-    - claim: groups
-      value: "orvex-ai-*"
-      roles: ["access", "orvex-ai-developer"]
-    # Catch-all: any Keycloak group member can log in with base access.
-    # New groups added in Keycloak automatically get access without connector changes.
     - claim: groups
       value: "*"
       roles: ["access"]
