@@ -138,33 +138,4 @@ spec:
       - resources: ["*"]
         verbs: ["*"]
 LREOF
-    echo "[$tag] Applying orvex-ai-developer role (dynamic kube access: groups == namespaces)..."
-    "${REPO_DIR}/build/tctl" --config "${TELEPORT_CONFIG_FILE:-${REPO_DIR}/deploy/dev/teleport.yaml}" \
-        create -f - --force <<'OADEOF' || echo "[$tag] WARN: orvex-ai-developer role apply failed"
-kind: role
-version: v7
-metadata:
-  name: orvex-ai-developer
-spec:
-  allow:
-    logins:
-      - "{{external.preferred_username}}"
-    kubernetes_groups:
-      - "system:masters"
-    kubernetes_labels:
-      "*": "*"
-    # {{external.groups}} expands per-value: a user in orvex-ai-foo and orvex-ai-bar
-    # automatically gets access to both namespaces. New groups require no role changes.
-    kubernetes_resources:
-      - kind: "*"
-        namespace: "{{external.groups}}"
-        name: "*"
-        verbs: ["*"]
-  deny:
-    kubernetes_resources:
-      - kind: "*"
-        namespace: "orvex-ai"
-        name: "*"
-        verbs: ["*"]
-OADEOF
 }
