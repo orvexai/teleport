@@ -1,0 +1,129 @@
+{
+  "repository_type": "monorepo",
+  "primary_focus": "auth-security",
+  "parts": [
+    {
+      "part_id": "backend",
+      "display_name": "Backend (Go core daemon)",
+      "project_type_id": "backend",
+      "root_path": "/",
+      "scope_paths": [
+        "api/",
+        "lib/",
+        "tool/",
+        "integration/",
+        "bpf/",
+        "proto/",
+        "gen/",
+        "examples/",
+        "fixtures/",
+        "constants.go",
+        "version.go",
+        "doc.go",
+        "e_imports.go",
+        "metrics.go"
+      ],
+      "primary_language": "Go",
+      "primary_framework": "gRPC + custom",
+      "go_module": "github.com/gravitational/teleport",
+      "go_version": "1.25.10",
+      "secondary_module": "github.com/gravitational/teleport/api",
+      "binaries": ["teleport", "tctl", "tsh", "tbot", "teleport-update", "fdpass-teleport"],
+      "license": "AGPL-3.0"
+    },
+    {
+      "part_id": "integrations",
+      "display_name": "Integrations (operator, terraform, plugins)",
+      "project_type_id": "backend",
+      "root_path": "/integrations/",
+      "scope_paths": [
+        "integrations/access/",
+        "integrations/operator/",
+        "integrations/terraform/",
+        "integrations/terraform-modules/",
+        "integrations/terraform-mwi/",
+        "integrations/event-handler/",
+        "integrations/kube-agent-updater/",
+        "integrations/lib/"
+      ],
+      "primary_language": "Go",
+      "primary_framework": "controller-runtime (operator), Terraform SDK, gRPC clients",
+      "sub_parts": [
+        "operator (K8s controller for Teleport resources)",
+        "terraform (Terraform provider for Teleport resources)",
+        "terraform-mwi (Machine & Workload Identity)",
+        "access-plugins (slack, jira, pagerduty, opsgenie, servicenow, msteams, mattermost, datadog, email, discord, accesslist, accessmonitoring, accessrequest, common)",
+        "event-handler (audit event forwarder)",
+        "kube-agent-updater (Kubernetes agent upgrader)"
+      ],
+      "license": "AGPL-3.0"
+    },
+    {
+      "part_id": "web",
+      "display_name": "Web UI (React)",
+      "project_type_id": "web",
+      "root_path": "/web/",
+      "scope_paths": [
+        "web/packages/teleport/",
+        "web/packages/design/",
+        "web/packages/shared/",
+        "web/packages/build/",
+        "web/.storybook/",
+        "web/scripts/"
+      ],
+      "primary_language": "TypeScript",
+      "primary_framework": "React 19 + Vite + styled-components",
+      "package_manager": "pnpm",
+      "node_version": "^24",
+      "key_deps": ["@tanstack/react-query", "react-router 7", "react-hook-form", "zod", "@grpc/grpc-js", "@protobuf-ts/runtime", "@codemirror", "@nivo", "immer"]
+    },
+    {
+      "part_id": "teleterm",
+      "display_name": "Teleport Connect (Electron desktop app)",
+      "project_type_id": "desktop",
+      "root_path": "/web/packages/teleterm/",
+      "scope_paths": [
+        "web/packages/teleterm/",
+        "lib/teleterm/"
+      ],
+      "primary_language": "TypeScript + Go",
+      "primary_framework": "Electron + electron-vite + electron-builder + React 19",
+      "license": "Apache-2.0",
+      "notes": "Cross-platform desktop client. Electron renderer in TS, main process talks to a Go daemon in lib/teleterm/ over gRPC."
+    },
+    {
+      "part_id": "rust-rdp",
+      "display_name": "RDP workspace (Rust)",
+      "project_type_id": "library",
+      "root_path": "/",
+      "scope_paths": [
+        "lib/srv/desktop/rdp/rdpclient/",
+        "lib/srv/desktop/rdp/decoder/",
+        "web/packages/shared/libs/ironrdp/"
+      ],
+      "primary_language": "Rust",
+      "primary_framework": "IronRDP (pinned git rev a0a3e750c)",
+      "workspace_resolver": "2",
+      "edition": "2021",
+      "notes": "Native rdpclient is loaded by the Go desktop service via CGo/FFI; ironrdp/ is compiled to WASM for browser-side RDP rendering."
+    }
+  ],
+  "ancillary": {
+    "docs_site": "/docs/ (Docusaurus MDX site published at goteleport.com/docs)",
+    "rfds": "/rfd/ (230 design docs, see rfd/0000-rfds.md)",
+    "build": "/build.assets/ + common.mk + Makefile + version.mk + darwin-signing.mk",
+    "ci": "/.github/workflows/ (51 workflows) + /.github/actions/ + /.github/services/",
+    "changelog": "/CHANGELOG.md (10423 lines)",
+    "enterprise_submodule": "/e/ (git submodule -> teleport.e, not cloned in this workspace)"
+  },
+  "scale": {
+    "go_files": 5893,
+    "typescript_files": 2815,
+    "rust_files": 21,
+    "proto_files": 238,
+    "lib_subdirs": 101,
+    "rfd_count": 230,
+    "github_workflows": 51,
+    "changelog_lines": 10423
+  }
+}

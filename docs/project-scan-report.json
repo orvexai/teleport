@@ -1,0 +1,80 @@
+{
+  "workflow_version": "1.2.0",
+  "timestamps": {
+    "started": "2026-05-24T14:02:39Z",
+    "last_updated": "2026-05-24T15:05:00Z",
+    "completed": "2026-05-24T15:05:00Z"
+  },
+  "mode": "initial_scan",
+  "scan_level": "exhaustive",
+  "project_root": "/home/daniel/repos/teleport",
+  "project_knowledge": "/home/daniel/repos/teleport/docs",
+  "current_step": "completed",
+  "completed_steps": [
+    {"step": "step_1",  "status": "completed", "timestamp": "2026-05-24T14:08:00Z", "summary": "Classified as monorepo with 5 parts: backend, integrations, web, teleterm, rust-rdp. Focus: auth-security."},
+    {"step": "step_2",  "status": "completed", "timestamp": "2026-05-24T14:11:00Z", "summary": "Existing-doc inventory: 100 READMEs, 230 RFDs, public docs/ site, AGENTS.md, CONTRIBUTING.md, CHANGELOG.md."},
+    {"step": "step_3",  "status": "completed", "timestamp": "2026-05-24T14:15:00Z", "summary": "Tech stack written for all 5 parts (Go 1.25, React 19, Electron 41, Rust 1.94, etc.)."},
+    {"step": "step_4",  "status": "completed", "timestamp": "2026-05-24T14:55:00Z", "summary": "7 parallel investigation agents completed. Total: 6,207 lines of file:line-cited deep findings across docs/findings/."},
+    {"step": "step_5",  "status": "completed", "timestamp": "2026-05-24T14:28:00Z", "summary": "source-tree-analysis.md (419 lines): annotated tree of all 5 parts + critical-folder quick ref + integration seams + multi-module build notes."},
+    {"step": "step_6",  "status": "completed", "timestamp": "2026-05-24T14:32:00Z", "summary": "development-guide.md (447 lines): prereqs, dockerised/local builds, FIPS/FIDO2 variants, code-gen workflow, all 7 test sub-targets, lint/format matrix, code conventions, contributing workflow, per-part dev loops, in-tree tools inventory."},
+    {"step": "step_7",  "status": "completed", "timestamp": "2026-05-24T14:34:00Z", "summary": "integration-architecture.md (145 lines): 24 cross-part seams catalogued (S1-S24) with transport, file references; logical topology diagram, process-level topology, build-time cross-part wiring."},
+    {"step": "step_8",  "status": "completed", "timestamp": "2026-05-24T15:00:00Z", "summary": "5 per-part architecture docs (1,257 lines total): backend (307), integrations (280), web (236), teleterm (215), rust-rdp (219). Each synthesizes findings into orientation + pointer index."},
+    {"step": "step_9",  "status": "completed", "timestamp": "2026-05-24T15:03:00Z", "summary": "Supporting docs: project-overview (180), api-contracts (195), data-models (229), component-inventory (242), deployment-guide (259), contribution-guide (146)."},
+    {"step": "step_10", "status": "completed", "timestamp": "2026-05-24T15:04:00Z", "summary": "Master index.md (234 lines): project overview + 5-part quick reference + generated docs + existing docs + getting-started + 18-row 'when you need to' table + notable conventions."},
+    {"step": "step_11", "status": "completed", "timestamp": "2026-05-24T15:05:00Z", "summary": "Validation: zero incomplete markers; all 25 internal sibling links resolve; all 8 parent-dir links resolve; both JSON files valid. User confirmed finalization."},
+    {"step": "step_12", "status": "completed", "timestamp": "2026-05-24T15:05:00Z", "summary": "Workflow finalized."}
+  ],
+  "project_types": [
+    {"part_id": "backend",      "project_type_id": "backend", "display_name": "Backend (Go core daemon)"},
+    {"part_id": "integrations", "project_type_id": "backend", "display_name": "Integrations"},
+    {"part_id": "web",          "project_type_id": "web",     "display_name": "Web UI (React)"},
+    {"part_id": "teleterm",     "project_type_id": "desktop", "display_name": "Teleport Connect (Electron)"},
+    {"part_id": "rust-rdp",     "project_type_id": "library", "display_name": "RDP workspace (Rust)"}
+  ],
+  "findings": {
+    "project_classification": {"repository_type": "monorepo", "parts_count": 5, "primary_focus": "auth-security", "primary_language": "Go (5893 files)"},
+    "scale": {"go_files": 5893, "ts_tsx_files": 2815, "rust_files": 21, "proto_files": 238, "lib_subdirs": 101, "rfds": 230, "github_workflows": 51, "go_modules": 6, "rust_workspace_crates": 3, "rust_standalone_crates": 1, "pnpm_packages": 5, "helm_charts": 14, "auth_v1_grpc_services": 55, "legacy_authservice_rpcs": 274, "rest_routes": 220, "prometheus_metrics": 150}
+  },
+  "outputs_generated": [
+    "project-scan-report.json",
+    "project-parts.json",
+    "index.md",
+    "project-overview.md",
+    "technology-stack.md",
+    "source-tree-analysis.md",
+    "integration-architecture.md",
+    "existing-documentation-inventory.md",
+    "architecture-backend.md",
+    "architecture-integrations.md",
+    "architecture-web.md",
+    "architecture-teleterm.md",
+    "architecture-rust-rdp.md",
+    "api-contracts.md",
+    "data-models.md",
+    "component-inventory.md",
+    "development-guide.md",
+    "deployment-guide.md",
+    "contribution-guide.md",
+    "findings/backend-auth-security.md",
+    "findings/backend-protocols.md",
+    "findings/backend-data-storage.md",
+    "findings/backend-api-surface.md",
+    "findings/web-and-teleterm.md",
+    "findings/integrations-rust-bpf-tools.md",
+    "findings/build-deploy-ops.md"
+  ],
+  "totals": {
+    "files_generated": 26,
+    "lines_generated": 15747,
+    "lines_findings": 6207,
+    "lines_architecture_and_guides": 9540
+  },
+  "verification": {
+    "incomplete_markers": "none",
+    "internal_links_resolved": "25/25",
+    "parent_dir_links_resolved": "8/8",
+    "json_validity": "all valid",
+    "user_confirmed": true
+  },
+  "resume_instructions": "Workflow complete. Re-running this workflow with the existing state file will prompt for resume / fresh-start / cancel."
+}
