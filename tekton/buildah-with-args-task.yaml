@@ -85,6 +85,14 @@ spec:
         bound, mounted at /tmp/ci/go inside every RUN step via buildah --volume.
       optional: true
 
+    - name: github-netrc
+      description: Optional secret workspace containing a ".netrc" key. When
+        bound, passed to buildah as `--secret id=github-netrc` so a Dockerfile
+        RUN can `--mount=type=secret,id=github-netrc,dst=/root/.netrc` to fetch
+        private repos / Go modules (e.g. github.com/orvexai/*). The token never
+        lands in an image layer. Unbound = no change (backward compatible).
+      optional: true
+
   steps:
     - name: build-and-push
       image: quay.io/buildah/stable:v1.42.2
@@ -190,6 +198,16 @@ spec:
           echo "Build cache: $(workspaces.build-cache.path) -> /tmp/ci (go + rust + yarn)"
         fi
 
+        # Optional GitHub .netrc as a build secret. A Dockerfile RUN opts in with
+        # `--mount=type=secret,id=github-netrc,dst=/root/.netrc` to authenticate
+        # private repo / Go module fetches. --secret is ephemeral (never written
+        # to an image layer). Unbound = flag omitted, no behavior change.
+        NETRC_SECRET=""
+        if [ "$(workspaces.github-netrc.bound)" == "true" ]; then
+          NETRC_SECRET="--secret id=github-netrc,src=$(workspaces.github-netrc.path)/.netrc"
+          echo "GitHub netrc: exposing build secret 'github-netrc' for private fetches"
+        fi
+
         echo "Building image: $(params.IMAGE)"
         echo "Dockerfile: $(params.DOCKERFILE)"
         echo "Context: $(params.CONTEXT)"
@@ -204,6 +222,7 @@ spec:
           --layers \
           ${BUILD_ARGS} \
           ${CACHE_VOLUME} \
+          ${NETRC_SECRET} \
           -f $(params.DOCKERFILE) \
           -t $(params.IMAGE) \
           $(params.CONTEXT)
