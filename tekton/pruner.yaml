@@ -58,22 +58,32 @@ spec:
                   KEEP=3
                   NS=tekton-pipelines
 
-                  echo "=== PipelineRun pruner: keeping newest $KEEP ==="
+                  echo "=== PipelineRun pruner: keeping newest $KEEP COMPLETED runs (in-flight runs are never pruned) ==="
 
+                  # Emit "name<TAB>conditionStatus", oldest-first.
+                  # Tekton PipelineRun .status.conditions[0].status:
+                  #   True    -> Succeeded (completed)
+                  #   False   -> Failed    (completed)
+                  #   Unknown -> Running/Pending (in-flight)   <-- MUST NOT be deleted
+                  #   ""      -> just created, no status yet (in-flight) <-- MUST NOT be deleted
                   ALL=$(kubectl get pipelinerun -n $NS \
                     --sort-by=.metadata.creationTimestamp \
-                    -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
+                    -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.conditions[0].status}{"\n"}{end}')
 
-                  TOTAL=$(echo "$ALL" | grep -c . || true)
-                  echo "Found $TOTAL PipelineRuns"
+                  # Keep only completed runs as prune candidates; skip Unknown/empty (in-flight).
+                  COMPLETED=$(echo "$ALL" | awk -F'\t' '$2=="True" || $2=="False" { print $1 }')
+
+                  TOTAL=$(echo "$COMPLETED" | grep -c . || true)
+                  echo "Found $TOTAL completed PipelineRuns (in-flight runs excluded from pruning)"
 
                   if [ "$TOTAL" -le "$KEEP" ]; then
                     echo "Nothing to prune."
                     exit 0
                   fi
 
-                  TO_DELETE=$(echo "$ALL" | head -n "-$KEEP")
+                  # Delete all but the newest $KEEP completed runs; in-flight runs were never candidates.
+                  TO_DELETE=$(echo "$COMPLETED" | head -n "-$KEEP")
                   COUNT=$(echo "$TO_DELETE" | grep -c . || true)
-                  echo "Deleting $COUNT old PipelineRuns..."
+                  echo "Deleting $COUNT old completed PipelineRuns..."
                   echo "$TO_DELETE" | xargs kubectl delete pipelinerun -n $NS
                   echo "Done."
