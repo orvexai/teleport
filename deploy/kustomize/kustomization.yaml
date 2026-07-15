@@ -29,6 +29,7 @@ resources:
 
   # Backblaze B2 creds for CNPG offsite backups
   - app-manifests/external-secret-cnpg-backup.yaml
+  - app-manifests/scheduled-backup.yaml
 
   # Persistent storage
   - app-manifests/pvc-workspace.yaml

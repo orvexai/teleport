@@ -1,0 +1,20 @@
+---
+# Daily base backup to Backblaze B2.
+# REQUIRED, not optional: barman only prunes WAL when a backup runs, and WAL without a
+# base backup is unrestorable. Without this, archived WAL grows forever AND can't be
+# recovered from.
+# NOTE: CNPG cron is 6 fields (sec min hour dom mon dow) — a 5-field cron silently
+# misfires (e.g. "0 2 * * *" = every hour at :02:00, not 02:00 daily).
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: teleport-db-daily
+  namespace: teleport-dev
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+spec:
+  schedule: "0 40 4 * * *"   # 04:40:00 UTC daily — staggered after the my-idp platform DBs (02:00–04:20)
+  backupOwnerReference: self
+  method: barmanObjectStore
+  cluster:
+    name: teleport-db
