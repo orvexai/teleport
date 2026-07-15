@@ -27,6 +27,9 @@ resources:
   # Registry credentials
   - app-manifests/external-secret-harbor.yaml
 
+  # Backblaze B2 creds for CNPG offsite backups
+  - app-manifests/external-secret-cnpg-backup.yaml
+
   # Persistent storage
   - app-manifests/pvc-workspace.yaml
   - app-manifests/pvc-home.yaml

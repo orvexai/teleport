@@ -27,6 +27,22 @@ spec:
   storage:
     storageClass: rook-ceph-block-xfs
     size: 10Gi
+  backup:
+    retentionPolicy: 30d
+    target: prefer-standby
+    barmanObjectStore:
+      destinationPath: s3://my-idp-eu-central-1/cnpg/teleport-dev/teleport-db/
+      endpointURL: https://s3.eu-central-003.backblazeb2.com
+      s3Credentials:
+        accessKeyId:
+          name: cnpg-backblaze-backup
+          key: AWS_ACCESS_KEY_ID
+        secretAccessKey:
+          name: cnpg-backblaze-backup
+          key: AWS_SECRET_ACCESS_KEY
+      wal:
+        compression: gzip
+        maxParallel: 2
   resources:
     requests:
       cpu: 50m
