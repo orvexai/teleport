@@ -81,7 +81,7 @@ spec:
                   NS=tekton-pipelines
 
                   CUTOFF=$(date -u -d "@$(( $(date -u +%s) - MIN_AGE_HOURS * 3600 ))" +%Y-%m-%dT%H:%M:%SZ)
-                  echo "=== PipelineRun pruner: per-pipeline KEEP=$KEEP, and nothing newer than $CUTOFF (${MIN_AGE_HOURS}h) ==="
+                  echo "=== PipelineRun pruner: per-workload KEEP=$KEEP, and nothing newer than $CUTOFF (${MIN_AGE_HOURS}h) ==="
 
                   # Emit "name<TAB>status<TAB>pipeline<TAB>created", oldest-first.
                   # .status.conditions[0].status:
@@ -89,20 +89,29 @@ spec:
                   #   False   -> Failed    (completed)
                   #   Unknown -> Running/Pending (in-flight)            <-- MUST NOT be deleted
                   #   ""      -> just created, no status yet (in-flight) <-- MUST NOT be deleted
-                  # A run whose `tekton.dev/pipeline` label is missing groups under
-                  # "<unlabelled>", which is its own bucket with its own budget — never
-                  # merged into another pipeline's, so an unlabelled run can neither
-                  # evict a labelled one nor be evicted by it.
+                  # ── The grouping key is the WORKLOAD, not the pipeline ──────────
+                  # Grouping by `tekton.dev/pipeline` alone was wrong the moment the
+                  # ENG-3154 cutover started: every service now runs the SAME shared
+                  # pipeline, so `orvex-shared-build` would be one bucket holding the
+                  # whole fleet, and a busy service would evict a quiet one's history.
+                  # The key is therefore `orvex.ai/service` + `orvex.ai/binary` when the
+                  # shared triggers set them, falling back to `tekton.dev/pipeline` for
+                  # legacy per-service pipelines, and to "<unlabelled>" otherwise —
+                  # each its own bucket with its own budget, so no run can evict a run
+                  # of a different workload.
                   ALL=$(kubectl get pipelinerun -n $NS \
                     --sort-by=.metadata.creationTimestamp \
-                    -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.conditions[0].status}{"\t"}{.metadata.labels.tekton\.dev/pipeline}{"\t"}{.metadata.creationTimestamp}{"\n"}{end}')
+                    -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.conditions[0].status}{"\t"}{.metadata.labels.tekton\.dev/pipeline}{"\t"}{.metadata.creationTimestamp}{"\t"}{.metadata.labels.orvex\.ai/service}{"\t"}{.metadata.labels.orvex\.ai/binary}{"\n"}{end}')
 
                   # Candidates: COMPLETED and older than the cutoff. Timestamps are
                   # RFC3339 UTC with a fixed width, so a string compare is a time
                   # compare — no date parsing per row.
                   CANDIDATES=$(echo "$ALL" | awk -F'\t' -v cutoff="$CUTOFF" '
                     ($2=="True" || $2=="False") && $4 < cutoff {
-                      print $1 "\t" ($3=="" ? "<unlabelled>" : $3)
+                      if ($5 != "" && $6 != "")      key = $5 "/" $6
+                      else if ($3 != "")             key = $3
+                      else                           key = "<unlabelled>"
+                      print $1 "\t" key
                     }')
 
                   # Per-pipeline: delete all but the newest KEEP. Input is oldest-first,
@@ -124,7 +133,7 @@ spec:
 
                   # Say WHAT is being deleted and WHY, by name — a build that goes
                   # missing has to be findable in this log.
-                  echo "Deleting $COUNT PipelineRun(s) (completed, older than ${MIN_AGE_HOURS}h, beyond the newest $KEEP of their pipeline):"
-                  echo "$TO_DELETE" | awk -F'\t' '{ printf "  %-56s  pipeline=%s\n", $1, $2 }'
+                  echo "Deleting $COUNT PipelineRun(s) (completed, older than ${MIN_AGE_HOURS}h, beyond the newest $KEEP of their workload):"
+                  echo "$TO_DELETE" | awk -F'\t' '{ printf "  %-56s  bucket=%s\n", $1, $2 }'
                   echo "$TO_DELETE" | cut -f1 | xargs kubectl delete pipelinerun -n $NS
                   echo "Done."
