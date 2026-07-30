@@ -55,35 +55,76 @@ spec:
                 - -c
                 - |
                   set -eu
-                  KEEP=3
+                  # ── Retention policy (ENG-3312) ──────────────────────────────────
+                  # Two budgets, both of which must be exceeded before anything is
+                  # deleted, and one hard exclusion.
+                  #
+                  # KEEP is PER PIPELINE, not per namespace. The previous version kept
+                  # the newest 3 completed runs in the WHOLE namespace, a budget
+                  # written when one push produced one run. It no longer holds: after
+                  # the ENG-3154 cutover a single `orvex-studio-staging` push produces
+                  # FOUR runs (api, relay, sweep, triage) and a `orvex-studio-workgraph`
+                  # push produces three, so two services pushing within a minute
+                  # exhausted the whole namespace budget and the next hourly tick took
+                  # everything else with it. A namespace-wide count is structurally
+                  # wrong: the runs-per-push is a function of how many binaries a
+                  # service ships, which the pruner cannot know.
+                  #
+                  # MIN_AGE_HOURS is the floor that actually matters to a human. An
+                  # operator debugging a bad deploy works in hours, not in "the last N
+                  # runs" — and a PipelineRun is the ONLY record of which digest a
+                  # workload was supposed to be running (`image-pinned-pull` lives in
+                  # .status.results and nowhere else). Deleting that an hour after the
+                  # deploy leaves "where did this pod's image come from?" unanswerable.
+                  KEEP=10
+                  MIN_AGE_HOURS=24
                   NS=tekton-pipelines
 
-                  echo "=== PipelineRun pruner: keeping newest $KEEP COMPLETED runs (in-flight runs are never pruned) ==="
+                  CUTOFF=$(date -u -d "@$(( $(date -u +%s) - MIN_AGE_HOURS * 3600 ))" +%Y-%m-%dT%H:%M:%SZ)
+                  echo "=== PipelineRun pruner: per-pipeline KEEP=$KEEP, and nothing newer than $CUTOFF (${MIN_AGE_HOURS}h) ==="
 
-                  # Emit "name<TAB>conditionStatus", oldest-first.
-                  # Tekton PipelineRun .status.conditions[0].status:
+                  # Emit "name<TAB>status<TAB>pipeline<TAB>created", oldest-first.
+                  # .status.conditions[0].status:
                   #   True    -> Succeeded (completed)
                   #   False   -> Failed    (completed)
-                  #   Unknown -> Running/Pending (in-flight)   <-- MUST NOT be deleted
+                  #   Unknown -> Running/Pending (in-flight)            <-- MUST NOT be deleted
                   #   ""      -> just created, no status yet (in-flight) <-- MUST NOT be deleted
+                  # A run whose `tekton.dev/pipeline` label is missing groups under
+                  # "<unlabelled>", which is its own bucket with its own budget — never
+                  # merged into another pipeline's, so an unlabelled run can neither
+                  # evict a labelled one nor be evicted by it.
                   ALL=$(kubectl get pipelinerun -n $NS \
                     --sort-by=.metadata.creationTimestamp \
-                    -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.conditions[0].status}{"\n"}{end}')
+                    -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.conditions[0].status}{"\t"}{.metadata.labels.tekton\.dev/pipeline}{"\t"}{.metadata.creationTimestamp}{"\n"}{end}')
 
-                  # Keep only completed runs as prune candidates; skip Unknown/empty (in-flight).
-                  COMPLETED=$(echo "$ALL" | awk -F'\t' '$2=="True" || $2=="False" { print $1 }')
+                  # Candidates: COMPLETED and older than the cutoff. Timestamps are
+                  # RFC3339 UTC with a fixed width, so a string compare is a time
+                  # compare — no date parsing per row.
+                  CANDIDATES=$(echo "$ALL" | awk -F'\t' -v cutoff="$CUTOFF" '
+                    ($2=="True" || $2=="False") && $4 < cutoff {
+                      print $1 "\t" ($3=="" ? "<unlabelled>" : $3)
+                    }')
 
-                  TOTAL=$(echo "$COMPLETED" | grep -c . || true)
-                  echo "Found $TOTAL completed PipelineRuns (in-flight runs excluded from pruning)"
+                  # Per-pipeline: delete all but the newest KEEP. Input is oldest-first,
+                  # so the first (n-KEEP) rows of each group are the ones to drop.
+                  TO_DELETE=$(echo "$CANDIDATES" | awk -F'\t' -v keep="$KEEP" '
+                    NF==2 { n[$2]++; name[$2, n[$2]] = $1 }
+                    END {
+                      for (p in n) {
+                        drop = n[p] - keep
+                        for (i = 1; i <= drop; i++) print name[p, i] "\t" p
+                      }
+                    }')
 
-                  if [ "$TOTAL" -le "$KEEP" ]; then
+                  COUNT=$(echo "$TO_DELETE" | grep -c . || true)
+                  if [ "$COUNT" -eq 0 ]; then
                     echo "Nothing to prune."
                     exit 0
                   fi
 
-                  # Delete all but the newest $KEEP completed runs; in-flight runs were never candidates.
-                  TO_DELETE=$(echo "$COMPLETED" | head -n "-$KEEP")
-                  COUNT=$(echo "$TO_DELETE" | grep -c . || true)
-                  echo "Deleting $COUNT old completed PipelineRuns..."
-                  echo "$TO_DELETE" | xargs kubectl delete pipelinerun -n $NS
+                  # Say WHAT is being deleted and WHY, by name — a build that goes
+                  # missing has to be findable in this log.
+                  echo "Deleting $COUNT PipelineRun(s) (completed, older than ${MIN_AGE_HOURS}h, beyond the newest $KEEP of their pipeline):"
+                  echo "$TO_DELETE" | awk -F'\t' '{ printf "  %-56s  pipeline=%s\n", $1, $2 }'
+                  echo "$TO_DELETE" | cut -f1 | xargs kubectl delete pipelinerun -n $NS
                   echo "Done."
