@@ -181,12 +181,19 @@ spec:
           export REGISTRY_AUTH_FILE=$(workspaces.dockerconfig.path)/.dockerconfigjson
         fi
 
-        # Build build-arg flags from params
-        BUILD_ARGS=""
-        [ -n "$(params.BUILD_ARG_1)" ] && BUILD_ARGS="$BUILD_ARGS --build-arg $(params.BUILD_ARG_1)"
-        [ -n "$(params.BUILD_ARG_2)" ] && BUILD_ARGS="$BUILD_ARGS --build-arg $(params.BUILD_ARG_2)"
-        [ -n "$(params.BUILD_ARG_3)" ] && BUILD_ARGS="$BUILD_ARGS --build-arg $(params.BUILD_ARG_3)"
-        [ -n "$(params.BUILD_ARG_4)" ] && BUILD_ARGS="$BUILD_ARGS --build-arg $(params.BUILD_ARG_4)"
+        # Build build-arg flags from params as an array, not a string. A plain
+        # string built here and later expanded unquoted word-splits on ANY
+        # whitespace, including whitespace inside a single build-arg's VALUE —
+        # turning it into extra stray positional args for `buildah bud` (which
+        # accepts at most one, the context dir). That's the exact cause of
+        # "Error: accepts at most 1 arg(s), received 6". An array + quoted
+        # expansion keeps each "--build-arg KEY=VALUE" pair intact regardless
+        # of spaces in VALUE.
+        BUILD_ARGS=()
+        [ -n "$(params.BUILD_ARG_1)" ] && BUILD_ARGS+=(--build-arg "$(params.BUILD_ARG_1)")
+        [ -n "$(params.BUILD_ARG_2)" ] && BUILD_ARGS+=(--build-arg "$(params.BUILD_ARG_2)")
+        [ -n "$(params.BUILD_ARG_3)" ] && BUILD_ARGS+=(--build-arg "$(params.BUILD_ARG_3)")
+        [ -n "$(params.BUILD_ARG_4)" ] && BUILD_ARGS+=(--build-arg "$(params.BUILD_ARG_4)")
 
         # Mount the entire /tmp/ci tree from the persistent PVC.
         # This covers GOPATH+GOCACHE (/tmp/ci/go), CARGO_HOME (/tmp/ci/rust),
@@ -211,7 +218,7 @@ spec:
         echo "Building image: $(params.IMAGE)"
         echo "Dockerfile: $(params.DOCKERFILE)"
         echo "Context: $(params.CONTEXT)"
-        echo "Build args: ${BUILD_ARGS}"
+        echo "Build args: ${BUILD_ARGS[*]}"
         echo ""
 
         # Build the image
@@ -220,7 +227,7 @@ spec:
           --tls-verify=$(params.TLS_VERIFY) \
           --pull=missing \
           --layers \
-          ${BUILD_ARGS} \
+          "${BUILD_ARGS[@]}" \
           ${CACHE_VOLUME} \
           ${NETRC_SECRET} \
           -f $(params.DOCKERFILE) \
