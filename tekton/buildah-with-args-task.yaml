@@ -118,53 +118,56 @@ spec:
         #!/bin/bash
         set -eu
 
-        # ── Tekton param capture ─ do NOT inline $(params.*) below this block ────
-        # Tekton substitutes $(params.X) as RAW TEXT into this script before bash
+        # ── Tekton param capture ─ do NOT inline param tokens below this block ───
+        # Tekton substitutes its param tokens as RAW TEXT into this script before bash
         # parses it. A value that came from a task RESULT carries a trailing newline
         # (Tekton does not strip it), so inlining one mid-command silently SPLITS the
         # command across lines.
         #
-        # That is what broke omnigent-app-build on 2026-09-18: `-t $(params.IMAGE) \`
-        # became two lines, so `buildah bud` ended early and SUCCEEDED (image built and
-        # tagged), then the orphaned `\` continued onto the CONTEXT line, leaving a bare
-        # `.` that bash ran as the source builtin:
+        # That is what broke omnigent-app-build on 2026-09-18: the IMAGE token on the
+        # `-t` flag became two lines, so `buildah bud` ended early and SUCCEEDED (built
+        # and tagged), then the orphaned continuation ran onto the CONTEXT line, leaving
+        # a bare `.` that bash ran as the source builtin:
         #     line 122: .: filename argument required   -> exit 2, nothing pushed
-        # Pipelines passing only $(params.*) (e.g. docmost) were unaffected, which made
-        # it look app-specific instead of like a bug in this shared Task.
+        # NOTE: no param token may appear in these comments either - Tekton has no
+        # concept of a bash comment and substitutes there too, which reintroduces
+        # the very split this block prevents (caught in review, 2026-09-18).
+        # Pipelines passing only pipeline params (e.g. docmost) were unaffected, making
+        # it look app-specific instead of a bug in this shared Task.
         #
-        # A QUOTED heredoc makes each value literal (no $, ` or " interpretation) and
-        # $( ) strips trailing newlines. Use ONLY these variables below.
-        IMAGE="$(cat <<'TEKTON_PARAM_EOF'
+        # A QUOTED heredoc makes each value literal (no $, backtick or quote handling)
+        # and command substitution strips trailing newlines. Use ONLY these variables.
+        IMAGE="$(cat <<'TEKTON_PARAM_EOF_8f21c7d4'
         $(params.IMAGE)
-        TEKTON_PARAM_EOF
+        TEKTON_PARAM_EOF_8f21c7d4
         )"
-        DOCKERFILE="$(cat <<'TEKTON_PARAM_EOF'
+        DOCKERFILE="$(cat <<'TEKTON_PARAM_EOF_8f21c7d4'
         $(params.DOCKERFILE)
-        TEKTON_PARAM_EOF
+        TEKTON_PARAM_EOF_8f21c7d4
         )"
-        CONTEXT="$(cat <<'TEKTON_PARAM_EOF'
+        CONTEXT="$(cat <<'TEKTON_PARAM_EOF_8f21c7d4'
         $(params.CONTEXT)
-        TEKTON_PARAM_EOF
+        TEKTON_PARAM_EOF_8f21c7d4
         )"
-        TLS_VERIFY="$(cat <<'TEKTON_PARAM_EOF'
+        TLS_VERIFY="$(cat <<'TEKTON_PARAM_EOF_8f21c7d4'
         $(params.TLS_VERIFY)
-        TEKTON_PARAM_EOF
+        TEKTON_PARAM_EOF_8f21c7d4
         )"
-        BUILD_ARG_1="$(cat <<'TEKTON_PARAM_EOF'
+        BUILD_ARG_1="$(cat <<'TEKTON_PARAM_EOF_8f21c7d4'
         $(params.BUILD_ARG_1)
-        TEKTON_PARAM_EOF
+        TEKTON_PARAM_EOF_8f21c7d4
         )"
-        BUILD_ARG_2="$(cat <<'TEKTON_PARAM_EOF'
+        BUILD_ARG_2="$(cat <<'TEKTON_PARAM_EOF_8f21c7d4'
         $(params.BUILD_ARG_2)
-        TEKTON_PARAM_EOF
+        TEKTON_PARAM_EOF_8f21c7d4
         )"
-        BUILD_ARG_3="$(cat <<'TEKTON_PARAM_EOF'
+        BUILD_ARG_3="$(cat <<'TEKTON_PARAM_EOF_8f21c7d4'
         $(params.BUILD_ARG_3)
-        TEKTON_PARAM_EOF
+        TEKTON_PARAM_EOF_8f21c7d4
         )"
-        BUILD_ARG_4="$(cat <<'TEKTON_PARAM_EOF'
+        BUILD_ARG_4="$(cat <<'TEKTON_PARAM_EOF_8f21c7d4'
         $(params.BUILD_ARG_4)
-        TEKTON_PARAM_EOF
+        TEKTON_PARAM_EOF_8f21c7d4
         )"
 
 
