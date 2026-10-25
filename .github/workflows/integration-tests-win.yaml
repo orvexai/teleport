@@ -3,8 +3,6 @@ run-name: Integration Tests (Win) - ${{ github.run_id }} - @${{ github.actor }}
 
 on:
   pull_request:
-  merge_group:
-
 jobs:
   changes:
     name: Check for relevant changes

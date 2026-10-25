@@ -2,19 +2,7 @@ name: Build on Mac OS
 run-name: Build on Mac OS
 
 on:
-  merge_group:
-    paths:
-      - ".github/workflows/build-macos.yaml"
-      - "**.go"
-      - "go.mod"
-      - "go.sum"
-      - "**.rs"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - "build.assets/Makefile"
-      - "build.assets/Dockerfile*"
-      - "Makefile"
-
+  workflow_dispatch: {}
 jobs:
   build:
     name: Build on Mac OS

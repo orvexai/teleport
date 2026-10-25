@@ -4,20 +4,8 @@ on:
     paths:
       - '.github/workflows/bloat.yaml'
   push:
-    paths:
-      - '.github/workflows/bloat.yaml'
-      - '**.go'
-      - 'go.mod'
-      - 'go.sum'
-      - '**.rs'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'Makefile'
-      - '*.mk'
-    branches:
-      - master
-      - branch/**
-
+    tags:
+      - '**'
 jobs:
   bloat_check:
     name: Bloat Check
