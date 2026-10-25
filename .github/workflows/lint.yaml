@@ -1,7 +1,6 @@
 name: Lint
 on:
   pull_request:
-  merge_group:
 env:
   GOFLAGS: '-buildvcs=false'
 

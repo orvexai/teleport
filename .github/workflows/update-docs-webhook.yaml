@@ -1,14 +1,8 @@
 name: Update docs webhook
 on:
   push:
-    paths:
-      - 'docs/**'
-      # docs/pages/changelog.mdx includes the main changelog, so redeploy the
-      # docs site to reflect any updates to this file.
-      - 'CHANGELOG.md'
-    branches:
-      - master
-      - branch/v*
+    tags:
+      - '**'
   workflow_dispatch:
 
 jobs:

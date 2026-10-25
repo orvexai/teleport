@@ -2,8 +2,6 @@ name: OS Compatibility Test
 run-name: OS Compatibility Test
 on:
   pull_request:
-  merge_group:
-
 jobs:
   changes:
     name: Check for relevant changes

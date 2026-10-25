@@ -3,8 +3,6 @@ run-name: Lint (Docs)
 on:
   pull_request:
 
-  merge_group:
-
 jobs:
   changes:
     name: Check for relevant changes
