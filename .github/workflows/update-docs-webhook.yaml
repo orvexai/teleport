@@ -4,6 +4,7 @@ on:
     tags:
       - '**'
   workflow_dispatch:
+
 jobs:
   update-webhook:
     name: Update docs webhook

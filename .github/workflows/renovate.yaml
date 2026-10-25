@@ -3,6 +3,9 @@
 name: Renovate
 on:
   workflow_dispatch: {}
+
+# Renovate authenticates with a GitHub App installation token. The default
+# GitHub token is only used to read the repository contents for checkout.
 permissions:
   contents: read
 

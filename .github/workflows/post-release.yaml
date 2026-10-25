@@ -3,6 +3,7 @@ name: Post-release
 
 on:
   workflow_dispatch:
+
 permissions:
   contents: write
   pull-requests: write
