@@ -109,15 +109,16 @@ spec:
       params:
         # Accept the orvex branch OR any git tag push on this repo.
         - name: filter
-          value: "body.repository.name == 'teleport' && (body.ref == 'refs/heads/orvex' || body.ref.startsWith('refs/tags/'))"
+          value: >-
+            body.repository.name == 'teleport' && body.ref.startsWith('refs/tags/') && body.deleted == false
         - name: overlays
           value:
             # Populate extensions.git-branch for the platform binding.
             - key: git-branch
-              expression: "body.ref.replace('refs/heads/', '').replace('/', '-')"
-            # Derive image tag: strip refs/tags/ or refs/heads/ prefix.
+              expression: "body.ref.replace('refs/tags/', '').replace('/', '-')"
+            # Derive image tag: strip refs/tags/ or refs/tags/ prefix.
             - key: image-tag
-              expression: "body.ref.startsWith('refs/tags/') ? body.ref.replace('refs/tags/', '') : body.ref.replace('refs/heads/', '').replace('/', '-')"
+              expression: "body.ref.startsWith('refs/tags/') ? body.ref.replace('refs/tags/', '') : body.ref.replace('refs/tags/', '').replace('/', '-')"
   bindings:
     # Platform-wide binding: extracts git-url and git-revision.
     - ref: github-push-defaults
