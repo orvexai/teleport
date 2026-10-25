@@ -11,8 +11,7 @@
 # Note both workflows must have the same name.
 name: Validate changelog entry
 on:
-  merge_group:
-
+  workflow_dispatch: {}
 jobs:
   validate-changelog:
     name: Validate the changelog entry

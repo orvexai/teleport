@@ -2,20 +2,7 @@ name: Build on Windows
 run-name: Build on Windows
 
 on:
-  merge_group:
-    paths:
-      - ".github/workflows/build-windows.yaml"
-      - "**.go"
-      - "go.mod"
-      - "go.sum"
-      - "build.assets/Makefile"
-      - "build.assets/Dockerfile*"
-      - "Makefile"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - "lib/srv/desktop/rdp/decoder/Cargo.toml"
-      - "lib/srv/desktop/rdp/decoder/src/**.rs"
-
+  workflow_dispatch: {}
 jobs:
   build:
     name: Build on Windows

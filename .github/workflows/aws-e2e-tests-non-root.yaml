@@ -4,8 +4,6 @@ run-name: AWS E2E Tests (Non-root) - ${{ github.run_id }} - @${{ github.actor }}
 on:
   pull_request:
 
-  merge_group:
-
 env:
   TEST_KUBE: true
   TEST_AWS_DB: true

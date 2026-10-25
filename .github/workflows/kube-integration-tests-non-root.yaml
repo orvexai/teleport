@@ -4,8 +4,6 @@ run-name: Kube Integration Tests (Non-root) - ${{ github.run_id }} - @${{ github
 on:
   pull_request:
 
-  merge_group:
-
 env:
   TEST_KUBE: true
   KUBECONFIG: /home/.kube/config

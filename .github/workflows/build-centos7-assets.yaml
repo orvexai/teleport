@@ -2,9 +2,6 @@ name: Build CentOS 7 Buildbox Assets Images
 run-name: Build CentOS 7 Buildbox Assets Images
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 13 * * 0' # At 1:00 PM UTC every Sunday
-
 env:
   REGISTRY: ghcr.io
 

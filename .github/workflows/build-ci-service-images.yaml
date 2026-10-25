@@ -2,12 +2,8 @@ name: Build CI Service Images
 run-name: Build CI Service Images
 on:
   push:
-    paths:
-      - .github/services/Dockerfile.*
-      - fixtures/etcdcerts/*.pem
-    branches:
-      - master
-
+    tags:
+      - '**'
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: gravitational/ci-etcd

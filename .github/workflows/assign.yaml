@@ -8,13 +8,7 @@
 # protected by CODEOWNERS.
 name: Assign
 on:
-  pull_request_target:
-    types: [opened, ready_for_review]
-
-# Limit the permissions on the GitHub token for this workflow to the subset
-# that is required. In this case, the assign workflow only needs to be able
-# to update the assigned reviewers, so it needs write access to
-# "pull-requests", nothing else.
+  workflow_dispatch: {}
 permissions:
     pull-requests: write
     actions: none
