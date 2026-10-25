@@ -2,6 +2,7 @@ name: Lint (Docs)
 run-name: Lint (Docs)
 on:
   pull_request:
+
 jobs:
   changes:
     name: Check for relevant changes

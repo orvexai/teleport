@@ -7,6 +7,7 @@ on:
       - '**.tf.json'
       - '**.hcl'
   workflow_dispatch:
+
 jobs:
   terraform-lint:
     uses: gravitational/shared-workflows/.github/workflows/terraform-lint.yaml@dd8f30e8fd5dd1d1655b9d27049e5d0f6f4f9ef2 # workflows/v0.0.3
