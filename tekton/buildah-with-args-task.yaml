@@ -104,7 +104,9 @@ spec:
       # Tune to your nodes / namespace LimitRange; these are a sane starting point.
       computeResources:
         requests:
-          cpu: "4"
+          # Reserve a smaller share so deploy builds can fit beside the ARC
+          # runners on node-6. The unchanged CPU limit still allows burst use.
+          cpu: "2"
           memory: 8Gi
         limits:
           cpu: "11"
