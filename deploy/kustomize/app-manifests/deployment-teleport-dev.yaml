@@ -106,7 +106,7 @@ spec:
               mountPath: /home/dev
           resources:
             requests:
-              cpu: "2"
+              cpu: 250m
               memory: 4Gi
             limits:
               cpu: "11"
